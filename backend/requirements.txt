@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+psycopg2-binary
+redis
+celery
+
+# For authentication and database
+python-jose[cryptography]
+passlib[bcrypt]
+SQLAlchemy
+python-multipart
