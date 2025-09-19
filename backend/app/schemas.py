@@ -60,8 +60,14 @@ class ListCreate(ListBase):
     """
     pass
 
+class ListUpdate(BaseModel):
+    """
+    リスト更新時にAPIが受け取るデータのスキーマ
+    """
+    title:Optional[str] = None 
+    board_id: Optional[int] = None
 
-class List(ListBase):
+class ListSchema(ListBase):
     """
     APIがレスポンスとして返すリスト情報のためのスキーマ。
     """
@@ -90,16 +96,22 @@ class BoardCreate(BoardBase):
     pass
 
 
+class BoardUpdate(BaseModel):
+    """
+    ボード更新時にAPIが受け取るデータのためのスキーマ。
+    全てのフィールドをOptionalにすることで、一部のフィールドのみの更新を可能にします。
+    """
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
 class Board(BoardBase):
     """
     APIがレスポンスとして返すボード情報のためのスキーマ。
     """
     id: int
     owner_id: int  # どのユーザーに属するかを示すID
-    lists: List[List] = []  # このボードが持つリストのリスト
-
-    class Config:
-        from_attributes = True
+    lists: List[ListSchema] = []  # このボードが持つリストのリスト
 
 
 # --- User Schemas ---

@@ -37,6 +37,26 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def authenticate_user(db: Session, email: str, password: str) -> Optional[models.User]:
+    """
+    ユーザーを認証する。
+
+    Args:
+        db: データベースセッション
+        email: ユーザーのメールアドレス
+        password: ユーザーのパスワード
+
+    Returns:
+        認証に成功した場合はUserモデルオブジェクト、そうでなければNone
+    """
+    user = crud.get_user_by_email(db, email=email)
+    if not user:
+        return None
+    if not verify_password(password, user.hashed_password):
+        return None
+    return user
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:

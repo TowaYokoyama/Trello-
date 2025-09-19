@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 # docker-compose.ymlで設定した環境変数からデータベースのURLを取得します。
 # このURLは、どのデータベースに、どのユーザー名とパスワードで接続するかを指定します。
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@db:5432/mydatabase")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5433/mydatabase?client_encoding=UTF8")
 
 # SQLAlchemyの「エンジン」を作成します。
 # これがデータベースへの中心的な接続ポイントとなります。

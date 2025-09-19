@@ -60,7 +60,7 @@ def create_user_board(db: Session, board: schemas.BoardCreate, user_id: int) -> 
     return db_board
 
 
-def update_board(db: Session, *, db_board: models.Board, board_in: Union[schemas.BoardUpdate, Dict[str, Any]]) -> models.Board:
+def update_board(db: Session, *, db_board: models.Board, board_in: Union["schemas.BoardUpdate", Dict[str, Any]]) -> models.Board:
     """
     データベース内のボードを更新します。
     """
@@ -120,7 +120,7 @@ def create_board_list(db: Session, list_item: schemas.ListCreate, board_id: int)
     return db_list
 
 
-def update_list(db: Session, *, db_list: models.List, list_in: Union[schemas.ListUpdate, Dict[str, Any]]) -> models.List:
+def update_list(db: Session, *, db_list: models.List, list_in: Union["schemas.ListUpdate", Dict[str, Any]]) -> models.List:
     """
     データベース内のリストを更新します。
     """
@@ -180,7 +180,7 @@ def create_list_card(db: Session, card: schemas.CardCreate, list_id: int) -> mod
     return db_card
 
 
-def update_card(db: Session, *, db_card: models.Card, card_in: Union[schemas.CardUpdate, Dict[str, Any]]) -> models.Card:
+def update_card(db: Session, *, db_card: models.Card, card_in: Union["schemas.CardUpdate", Dict[str, Any]]) -> models.Card:
     """
     データベース内のカードを更新します。
     """

@@ -1,6 +1,7 @@
 from typing import List
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -11,6 +12,19 @@ from .database import SessionLocal, engine
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# CORSミドルウェアを有効にする
+origins = [
+    "http://localhost:8081",  # Next.jsアプリケーションのオリジン
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # データベースセッションの依存関係
 def get_db():
@@ -23,7 +37,7 @@ def get_db():
 
 # --- 認証関連のエンドポイント ---
 
-@app.post("/token", response_model=schemas.Token)
+@app.post("/api/auth/login", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     ユーザー名とパスワードで認証し、アクセストークンを返します。
@@ -39,7 +53,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.post("/users/", response_model=schemas.User)
+@app.post("/api/auth/register", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """
     新しいユーザーを登録します。
@@ -50,7 +64,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return crud.create_user(db=db, user=user)
 
 
-@app.get("/users/me/", response_model=schemas.User)
+@app.get("/api/users/me", response_model=schemas.User)
 def read_users_me(current_user: schemas.User = Depends(auth.get_current_user)):
     """
     現在認証されているユーザーの情報を取得します。
@@ -134,7 +148,7 @@ def delete_board(
 
 # --- List エンドポイント ---
 
-@app.post("/boards/{board_id}/lists/", response_model=schemas.List)
+@app.post("/boards/{board_id}/lists/", response_model=schemas.ListSchema)
 def create_list_for_board(
     board_id: int,
     list_item: schemas.ListCreate,
@@ -150,7 +164,7 @@ def create_list_for_board(
     return crud.create_board_list(db=db, list_item=list_item, board_id=board_id)
 
 
-@app.get("/boards/{board_id}/lists/", response_model=List[schemas.List])
+@app.get("/boards/{board_id}/lists/", response_model=List[schemas.ListSchema])
 def read_lists_for_board(
     board_id: int,
     skip: int = 0,
@@ -168,7 +182,7 @@ def read_lists_for_board(
     return lists
 
 
-@app.get("/lists/{list_id}", response_model=schemas.List)
+@app.get("/lists/{list_id}", response_model=schemas.ListSchema)
 def read_list(
     list_id: int,
     db: Session = Depends(get_db),
@@ -183,7 +197,7 @@ def read_list(
     return db_list
 
 
-@app.put("/lists/{list_id}", response_model=schemas.List)
+@app.put("/lists/{list_id}", response_model=schemas.ListSchema)
 def update_list(
     list_id: int,
     list_item: schemas.ListUpdate,
@@ -199,7 +213,7 @@ def update_list(
     return crud.update_list(db=db, db_list=db_list, list_in=list_item)
 
 
-@app.delete("/lists/{list_id}", response_model=schemas.List)
+@app.delete("/lists/{list_id}", response_model=schemas.ListSchema)
 def delete_list(
     list_id: int,
     db: Session = Depends(get_db),
