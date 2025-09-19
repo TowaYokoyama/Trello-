@@ -1,27 +1,23 @@
 import React, { useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { TouchableOpacity, Text } from 'react-native';
-import tw from 'twrnc';
+import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 
 export default function AppLayout() {
   const { token, isLoading, logout } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    // 読み込みが完了し、かつトークンがない場合
-    if (!isLoading && !token) {
-      // ログイン画面にリダイレクト
-      router.replace('/login');
-    }
-  }, [isLoading, token, router]);
+  // このuseEffectは、app/index.tsxにリダイレクトロジックを移管したため不要になります。
+  // useEffect(() => {
+  //   if (!isLoading && !token) {
+  //     router.replace('/login');
+  //   }
+  // }, [isLoading, token, router]);
 
-  // 認証状態を確認中は何も表示しない
   if (isLoading) {
-    return null; // またはスピナーなどのローディング表示
+    return null;
   }
 
-  // 認証済みの場合、子画面を表示
   return (
     <Stack>
       <Stack.Screen
@@ -29,8 +25,8 @@ export default function AppLayout() {
         options={{
           title: 'My Tasks',
           headerRight: () => (
-            <TouchableOpacity onPress={logout} style={tw`mr-4`}>
-              <Text style={tw`text-blue-500`}>Logout</Text>
+            <TouchableOpacity onPress={() => { console.log('Logout button pressed'); logout(); }} style={styles.logoutButton}>
+              <Text style={styles.logoutButtonText}>Logout</Text>
             </TouchableOpacity>
           ),
         }}
@@ -38,3 +34,13 @@ export default function AppLayout() {
     </Stack>
   );
 }
+
+const styles = StyleSheet.create({
+  logoutButton: {
+    marginRight: 16,
+  },
+  logoutButtonText: {
+    color: '#3b82f6',
+    fontSize: 16,
+  },
+});

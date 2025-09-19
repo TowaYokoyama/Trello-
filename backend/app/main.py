@@ -1,111 +1,296 @@
-# backend/main.py
-
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
 from typing import List
 
-# これまでに作成したモジュールをインポートします。
-from . import auth, crud, models, schemas
-from .database import engine
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 
-# --- データベースの初期化 ---
-# アプリケーション起動時に、modelsで定義されたテーブルをDBに作成します。
+from . import crud, models, schemas, auth
+from .database import SessionLocal, engine
+
+# データベースのテーブルを作成します。
 models.Base.metadata.create_all(bind=engine)
 
-# FastAPIアプリケーションのインスタンスを作成します。
 app = FastAPI()
 
-
-# --- APIエンドポイント ---
-
-# --- 認証関連 --- #
-@app.post("/api/auth/register", response_model=schemas.User)
-def register_user(user: schemas.UserCreate, db: Session = Depends(auth.get_db)):
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.create_user(db=db, user=user)
+# データベースセッションの依存関係
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-@app.post("/api/auth/login", response_model=schemas.Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(auth.get_db)):
-    user = crud.get_user_by_email(db, email=form_data.username)
-    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+# --- 認証関連のエンドポイント ---
+
+@app.post("/token", response_model=schemas.Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    ユーザー名とパスワードで認証し、アクセストークンを返します。
+    """
+    user = auth.authenticate_user(db, form_data.username, form_data.password)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = auth.create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-# --- タスク関連 --- #
+@app.post("/users/", response_model=schemas.User)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    """
+    新しいユーザーを登録します。
+    """
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.create_user(db=db, user=user)
 
-@app.post("/api/tasks/", response_model=schemas.Task)
-def create_task(
-    task: schemas.TaskCreate, 
-    db: Session = Depends(auth.get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+
+@app.get("/users/me/", response_model=schemas.User)
+def read_users_me(current_user: schemas.User = Depends(auth.get_current_user)):
+    """
+    現在認証されているユーザーの情報を取得します。
+    """
+    return current_user
+
+
+# --- Board エンドポイント ---
+
+@app.post("/users/me/boards/", response_model=schemas.Board)
+def create_board_for_current_user(
+    board: schemas.BoardCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
 ):
     """
-    新しいタスクを作成します。
+    現在認証されているユーザーのために新しいボードを作成します。
     """
-    return crud.create_user_task(db=db, task=task, user_id=current_user.id)
+    return crud.create_user_board(db=db, board=board, user_id=current_user.id)
 
 
-@app.get("/api/tasks/", response_model=List[schemas.Task])
-def read_tasks(
-    db: Session = Depends(auth.get_db),
-    skip: int = 0, 
-    limit: int = 100, 
-    current_user: models.User = Depends(auth.get_current_user)
+@app.get("/users/me/boards/", response_model=List[schemas.Board])
+def read_boards_for_current_user(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
 ):
     """
-    現在のログインユーザーが所有するタスクの一覧を取得します。
+    現在認証されているユーザーが所有するすべてのボードを取得します。
     """
-    tasks = crud.get_tasks_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
-    return tasks
+    boards = crud.get_boards_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
+    return boards
 
 
-@app.put("/api/tasks/{task_id}", response_model=schemas.Task)
-def update_task_endpoint(
-    task_id: int,
-    task_in: schemas.TaskUpdate,
-    db: Session = Depends(auth.get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+@app.get("/boards/{board_id}", response_model=schemas.Board)
+def read_board(
+    board_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
 ):
     """
-    指定されたIDのタスクを更新します。
+    指定されたIDのボードを取得します。ユーザーがボードの所有者であることを確認します。
     """
-    db_task = crud.get_task(db=db, task_id=task_id)
-    if not db_task or db_task.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    updated_task = crud.update_task(db=db, db_task=db_task, task_in=task_in)
-    return updated_task
+    db_board = crud.get_board(db, board_id=board_id)
+    if db_board is None or db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+    return db_board
 
 
-@app.delete("/api/tasks/{task_id}", response_model=schemas.Task)
-def delete_task_endpoint(
-    task_id: int,
-    db: Session = Depends(auth.get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+@app.put("/boards/{board_id}", response_model=schemas.Board)
+def update_board(
+    board_id: int,
+    board: schemas.BoardUpdate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
 ):
     """
-    指定されたIDのタスクを削除します。
+    指定されたIDのボードを更新します。ユーザーがボードの所有者であることを確認します。
     """
-    db_task = crud.get_task(db=db, task_id=task_id)
-    if not db_task or db_task.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    deleted_task = crud.delete_task(db=db, db_task=db_task)
-    return deleted_task
+    db_board = crud.get_board(db, board_id=board_id)
+    if db_board is None or db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+    return crud.update_board(db=db, db_board=db_board, board_in=board)
 
 
-# --- 動作確認用のルートエンドポイント --- #
+@app.delete("/boards/{board_id}", response_model=schemas.Board)
+def delete_board(
+    board_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたIDのボードを削除します。ユーザーがボードの所有者であることを確認します。
+    """
+    db_board = crud.get_board(db, board_id=board_id)
+    if db_board is None or db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+    return crud.delete_board(db=db, db_board=db_board)
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Trello Clone API"}
+
+# --- List エンドポイント ---
+
+@app.post("/boards/{board_id}/lists/", response_model=schemas.List)
+def create_list_for_board(
+    board_id: int,
+    list_item: schemas.ListCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたボード内に新しいリストを作成します。ユーザーがボードの所有者であることを確認します。
+    """
+    db_board = crud.get_board(db, board_id=board_id)
+    if db_board is None or db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+    return crud.create_board_list(db=db, list_item=list_item, board_id=board_id)
+
+
+@app.get("/boards/{board_id}/lists/", response_model=List[schemas.List])
+def read_lists_for_board(
+    board_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたボードに属するすべてのリストを取得します。ユーザーがボードの所有者であることを確認します。
+    """
+    db_board = crud.get_board(db, board_id=board_id)
+    if db_board is None or db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+    lists = crud.get_lists_by_board(db, board_id=board_id, skip=skip, limit=limit)
+    return lists
+
+
+@app.get("/lists/{list_id}", response_model=schemas.List)
+def read_list(
+    list_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたIDのリストを取得します。ユーザーがリストの属するボードの所有者であることを確認します。
+    """
+    db_list = crud.get_list(db, list_id=list_id)
+    if db_list is None or db_list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+    return db_list
+
+
+@app.put("/lists/{list_id}", response_model=schemas.List)
+def update_list(
+    list_id: int,
+    list_item: schemas.ListUpdate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたIDのリストを更新します。ユーザーがリストの属するボードの所有者であることを確認します。
+    """
+    db_list = crud.get_list(db, list_id=list_id)
+    if db_list is None or db_list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+    return crud.update_list(db=db, db_list=db_list, list_in=list_item)
+
+
+@app.delete("/lists/{list_id}", response_model=schemas.List)
+def delete_list(
+    list_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたIDのリストを削除します。ユーザーがリストの属するボードの所有者であることを確認します。
+    """
+    db_list = crud.get_list(db, list_id=list_id)
+    if db_list is None or db_list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+    return crud.delete_list(db=db, db_list=db_list)
+
+
+# --- Card エンドポイント ---
+
+@app.post("/lists/{list_id}/cards/", response_model=schemas.Card)
+def create_card_for_list(
+    list_id: int,
+    card: schemas.CardCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたリスト内に新しいカードを作成します。ユーザーがリストの属するボードの所有者であることを確認します。
+    """
+    db_list = crud.get_list(db, list_id=list_id)
+    if db_list is None or db_list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+    return crud.create_list_card(db=db, card=card, list_id=list_id)
+
+
+@app.get("/lists/{list_id}/cards/", response_model=List[schemas.Card])
+def read_cards_for_list(
+    list_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたリストに属するすべてのカードを取得します。ユーザーがリストの属するボードの所有者であることを確認します。
+    """
+    db_list = crud.get_list(db, list_id=list_id)
+    if db_list is None or db_list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+    cards = crud.get_cards_by_list(db, list_id=list_id, skip=skip, limit=limit)
+    return cards
+
+
+@app.get("/cards/{card_id}", response_model=schemas.Card)
+def read_card(
+    card_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたIDのカードを取得します。ユーザーがカードの属するリストのボードの所有者であることを確認します。
+    """
+    db_card = crud.get_card(db, card_id=card_id)
+    if db_card is None or db_card.list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Card not found or not owned by user")
+    return crud.get_card(db, card_id=card_id)
+
+
+@app.put("/cards/{card_id}", response_model=schemas.Card)
+def update_card(
+    card_id: int,
+    card: schemas.CardUpdate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたIDのカードを更新します。ユーザーがカードの属するリストのボードの所有者であることを確認します。
+    """
+    db_card = crud.get_card(db, card_id=card_id)
+    if db_card is None or db_card.list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Card not found or not owned by user")
+    return crud.update_card(db=db, db_card=db_card, card_in=card)
+
+
+@app.delete("/cards/{card_id}", response_model=schemas.Card)
+def delete_card(
+    card_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    """
+    指定されたIDのカードを削除します。ユーザーがカードの属するリストのボードの所有者であることを確認します。
+    """
+    db_card = crud.get_card(db, card_id=card_id)
+    if db_card is None or db_card.list.board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Card not found or not owned by user")
+    return crud.delete_card(db=db, db_card=db_card)

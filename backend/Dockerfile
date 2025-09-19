@@ -8,6 +8,9 @@ WORKDIR /app
 COPY ./requirements.txt .
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
+# bcryptのバージョン問題を解決するために、安定したバージョンを明示的にインストールします
+RUN pip install bcrypt==3.2.0
+
 # アプリケーションコードを作業ディレクトリにコピーします
 # これにより、'app'ディレクトリなどがコンテナ内に配置されます
 COPY . .

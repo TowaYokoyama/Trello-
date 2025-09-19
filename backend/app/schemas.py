@@ -3,49 +3,103 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
-# --- Task Schemas ---
-# 下でUserスキーマを定義するため、先にTask関連を定義します。
+# --- Card Schemas --- (旧 Task Schemas)
+# 下でListスキーマを定義するため、先にCard関連を定義します。
 
-class TaskBase(BaseModel):
+class CardBase(BaseModel):
     """
-    タスク情報の基本となるスキーマ。
+    カード情報の基本となるスキーマ。
     """
     title: str
     description: Optional[str] = None
 
 
-class TaskCreate(TaskBase):
+class CardCreate(CardBase):
     """
-    タスク作成時にAPIが受け取るデータのためのスキーマ。
-    TaskBaseを継承しているため、titleとdescriptionフィールドを持ちます。
+    カード作成時にAPIが受け取るデータのためのスキーマ。
+    CardBaseを継承しているため、titleとdescriptionフィールドを持ちます。
     """
-    pass # 追加のフィールドがない場合はpassと書きます
+    pass  # 追加のフィールドがない場合はpassと書きます
 
 
-class TaskUpdate(BaseModel):
+class CardUpdate(BaseModel):
     """
-    タスク更新時にAPIが受け取るデータのためのスキーマ。
+    カード更新時にAPIが受け取るデータのためのスキーマ。
     全てのフィールドをOptionalにすることで、一部のフィールドのみの更新を可能にします。
-    (例: タイトルだけ変更する、完了状態だけ変更する、など)
     """
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None
 
 
-class Task(TaskBase):
+class Card(CardBase):
     """
-    APIがレスポンスとして返すタスク情報のためのスキーマ。
+    APIがレスポンスとして返すカード情報のためのスキーマ。
     """
     id: int
     completed: bool
-    owner_id: int # どのユーザーに属するかを示すID
+    list_id: int  # どのリストに属するかを示すID
 
     class Config:
-        # orm_mode = True を設定すると、このPydanticモデルが
-        # SQLAlchemyモデル（ORMオブジェクト）から自動的にデータを読み取れるようになります。
-        # 例: task_model.title のように、DBモデルの属性から値を取得してスキーマを構成します。
-        orm_mode = True
+        # ORMモデルからPydanticモデルへの変換を可能にします。
+        from_attributes = True
+
+
+# --- List Schemas ---
+
+class ListBase(BaseModel):
+    """
+    リスト情報の基本となるスキーマ。
+    """
+    title: str
+
+
+class ListCreate(ListBase):
+    """
+    リスト作成時にAPIが受け取るデータのためのスキーマ。
+    """
+    pass
+
+
+class List(ListBase):
+    """
+    APIがレスポンスとして返すリスト情報のためのスキーマ。
+    """
+    id: int
+    board_id: int  # どのボードに属するかを示すID
+    cards: List[Card] = []  # このリストが持つカードのリスト
+
+    class Config:
+        from_attributes = True
+
+
+# --- Board Schemas ---
+
+class BoardBase(BaseModel):
+    """
+    ボード情報の基本となるスキーマ。
+    """
+    title: str
+    description: Optional[str] = None
+
+
+class BoardCreate(BoardBase):
+    """
+    ボード作成時にAPIが受け取るデータのためのスキーマ。
+    """
+    pass
+
+
+class Board(BoardBase):
+    """
+    APIがレスポンスとして返すボード情報のためのスキーマ。
+    """
+    id: int
+    owner_id: int  # どのユーザーに属するかを示すID
+    lists: List[List] = []  # このボードが持つリストのリスト
+
+    class Config:
+        from_attributes = True
 
 
 # --- User Schemas ---
@@ -69,16 +123,14 @@ class User(UserBase):
     APIレスポンスとして返すユーザー情報のためのスキーマ。
     """
     id: int
-    # --- ここから追加 --- #
-    # このユーザーが所有するタスクのリスト。
+    # このユーザーが所有するボードのリスト。
     # レスポンスモデルとしてUserスキーマを指定すると、FastAPIは自動的に
-    # user.tasks (models.pyで定義したrelationship) からデータを取得し、
-    # この'tasks'フィールドにTaskスキーマのリストとして設定してくれます。
-    tasks: List[Task] = []
-    # --- ここまで追加 --- #
+    # user.boards (models.pyで定義したrelationship) からデータを取得し、
+    # この'boards'フィールドにBoardスキーマのリストとして設定してくれます。
+    boards: List[Board] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # --- Token Schemas ---

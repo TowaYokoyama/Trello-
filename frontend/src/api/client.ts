@@ -9,11 +9,15 @@ const apiClient = axios.create({
 // リクエストインターセプターの設定
 apiClient.interceptors.request.use(
   async (config) => {
-    // AsyncStorageからトークンを非同期で取得
+    console.log('API Client: Attempting to get token from AsyncStorage');
     const token = await AsyncStorage.getItem('token');
+    console.log('API Client: Token from AsyncStorage:', token ? '[TOKEN_EXISTS]' : '[NO_TOKEN]');
+
     if (token) {
-      // トークンがあれば、Authorizationヘッダーにセット
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('API Client: Setting Authorization header:', config.headers.Authorization ? '[HEADER_SET]' : '[HEADER_NOT_SET]');
+    } else {
+      console.log('API Client: No token found, Authorization header not set.');
     }
     return config;
   },

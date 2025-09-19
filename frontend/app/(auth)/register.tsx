@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
-import tw from 'twrnc';
 import { Link } from 'expo-router';
 
 export default function RegisterScreen() {
@@ -12,17 +11,16 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     try {
       await register(email, password);
-      // 登録成功後、自動的にログインされ、ナビゲーションは後ほど自動処理
-    } catch (error) {
-      Alert.alert('Registration Failed', 'Please try again.');
+    } catch (error: any) {
+      Alert.alert('Registration Failed', error.message);
     }
   };
 
   return (
-    <View style={tw`flex-1 justify-center items-center bg-gray-100 p-4`}>
-      <Text style={tw`text-3xl font-bold mb-6 text-gray-800`}>Register</Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>Register</Text>
       <TextInput
-        style={tw`w-full bg-white border border-gray-300 rounded-lg px-4 py-3 mb-4`}
+        style={styles.input}
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
@@ -30,23 +28,64 @@ export default function RegisterScreen() {
         autoCapitalize="none"
       />
       <TextInput
-        style={tw`w-full bg-white border border-gray-300 rounded-lg px-4 py-3 mb-6`}
+        style={styles.input}
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
-      <TouchableOpacity
-        style={tw`w-full bg-green-500 rounded-lg py-3`}
-        onPress={handleRegister}
-      >
-        <Text style={tw`text-white text-center font-bold text-lg`}>Register</Text>
+      <TouchableOpacity style={styles.button} onPress={handleRegister}>
+        <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
       <Link href="/login" asChild>
-        <TouchableOpacity style={tw`mt-4`}>
-          <Text style={tw`text-blue-500`}>Already have an account? Login</Text>
+        <TouchableOpacity style={styles.link}>
+          <Text style={styles.linkText}>Already have an account? Login</Text>
         </TouchableOpacity>
       </Link>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    padding: 16,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    marginBottom: 24,
+    color: '#1f2937',
+  },
+  input: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  button: {
+    width: '100%',
+    backgroundColor: '#22c55e', // Green color
+    borderRadius: 8,
+    paddingVertical: 12,
+  },
+  buttonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  link: {
+    marginTop: 16,
+  },
+  linkText: {
+    color: '#3b82f6',
+  },
+});

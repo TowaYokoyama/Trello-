@@ -1,25 +1,41 @@
 import { useAuth } from '../src/contexts/AuthContext';
-import { Redirect } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
-import tw from 'twrnc';
+import { useRouter } from 'expo-router';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { useEffect } from 'react';
 
 export default function StartPage() {
   const { token, isLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    // ローディングが完了したら
+    if (!isLoading) {
+      if (token) {
+        // トークンがあればタスク一覧へ
+        router.replace('/(app)');
+      } else {
+        // トークンがなければログイン画面へ
+        router.replace('/(auth)/login');
+      }
+    }
+  }, [isLoading, token, router]); // isLoadingとtokenの変化を監視
 
   if (isLoading) {
-    // 読み込み中はスピナーを表示
     return (
-      <View style={tw`flex-1 justify-center items-center`}>
+      <View style={styles.container}>
         <ActivityIndicator size="large" />
       </View>
     );
   }
 
-  if (token) {
-    // トークンがあれば、(app)グループのindex（タスク一覧）にリダイレクト
-    return <Redirect href="/(app)" />;
-  } else {
-    // トークンがなければ、(auth)グループのloginにリダイレクト
-    return <Redirect href="/(auth)/login" />;
-  }
+  // ローディングが完了し、useEffectでリダイレクトされるため、このコンポーネントは何も表示しない
+  return null;
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

@@ -17,35 +17,51 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
 
-    # --- ここから追加 --- #
-    # UserとTaskの関連付けを定義します。
-    # "Task"はこのUserモデルが関連するモデルクラス名を指定します。
-    # back_populates="owner"は、Taskモデル側の'owner'という属性と相互に関連付けることを示します。
-    # これにより、user.tasks という形で、そのユーザーが持つタスクのリストにアクセスできます。
-    tasks = relationship("Task", back_populates="owner")#Taskモデルとセットで結びつく
-    # --- ここまで追加 --- #
+    boards = relationship("Board", back_populates="owner")
 
 
-# --- ここから追加 --- #
-class Task(Base):
+class Board(Base):
     """
-    データベースの'tasks'テーブルを表すモデルクラス。
+    データベースの'boards'テーブルを表すモデルクラス。
     """
-    __tablename__ = "tasks"
+    __tablename__ = "boards"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
-    description = Column(String, index=True, nullable=True) # nullable=Trueは、このカラムが空でも良いことを示します
-    completed = Column(Boolean, default=False) # default=Falseは、作成時に指定がなければ自動的にFalseが入ることを示します
+    description = Column(String, index=True, nullable=True)
 
-    # --- 外部キー(ForeignKey)の定義 --- #
-    # owner_idカラムを、usersテーブルのidカラムへの外部キーとして設定します。
-    # これにより、「tasksテーブルのowner_idは、必ずusersテーブルに存在するidである」という制約が生まれます。
     owner_id = Column(Integer, ForeignKey("users.id"))
+    owner = relationship("User", back_populates="boards")
 
-    # --- 逆方向の関連付け --- #
-    # TaskとUserの関連付けを定義します。
-    # back_populates="tasks"は、Userモデル側の'tasks'という属性と相互に関連付けることを示します。
-    # これにより、task.owner という形で、そのタスクを所有するユーザーオブジェクトにアクセスできます。
-    owner = relationship("User", back_populates="tasks")
-# --- ここまで追加 --- #
+    lists = relationship("List", back_populates="board")
+
+
+class List(Base):
+    """
+    データベースの'lists'テーブルを表すモデルクラス。
+    """
+    __tablename__ = "lists"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+
+    board_id = Column(Integer, ForeignKey("boards.id"))
+    board = relationship("Board", back_populates="lists")
+
+    cards = relationship("Card", back_populates="list")
+
+
+class Card(Base):
+    """
+    データベースの'cards'テーブルを表すモデルクラス。
+    """
+    __tablename__ = "cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+    description = Column(String, index=True, nullable=True)
+    completed = Column(Boolean, default=False)
+
+    list_id = Column(Integer, ForeignKey("lists.id"))
+    list = relationship("List", back_populates="cards")
+
