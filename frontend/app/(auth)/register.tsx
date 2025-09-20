@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, useWindowDimensions } from 'react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { Link } from 'expo-router';
 
@@ -7,6 +7,8 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { register } = useAuth();
+  const { width } = useWindowDimensions();
+  const isWeb = width > 768;
 
   const handleRegister = async () => {
     try {
@@ -18,30 +20,32 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Register</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Register</Text>
-      </TouchableOpacity>
-      <Link href="/login" asChild>
-        <TouchableOpacity style={styles.link}>
-          <Text style={styles.linkText}>Already have an account? Login</Text>
+      <View style={[styles.contentContainer, isWeb && styles.contentContainerWeb]}>
+        <Text style={styles.title}>Register</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
+        <TouchableOpacity style={styles.button} onPress={handleRegister}>
+          <Text style={styles.buttonText}>Register</Text>
         </TouchableOpacity>
-      </Link>
+        <Link href="/login" asChild>
+          <TouchableOpacity style={styles.link}>
+            <Text style={styles.linkText}>Already have an account? Login</Text>
+          </TouchableOpacity>
+        </Link>
+      </View>
     </View>
   );
 }
@@ -53,6 +57,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f3f4f6',
     padding: 16,
+  },
+  contentContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  contentContainerWeb: {
+    maxWidth: 400,
   },
   title: {
     fontSize: 30,
