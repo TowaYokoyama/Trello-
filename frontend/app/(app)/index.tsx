@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
+  Platform,
   View, 
   Text, 
   TextInput, 
@@ -14,6 +15,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import apiClient from '../../src/api/client';
+import { useAuth } from '../../src/contexts/AuthContext';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 // --- 型定義 ---
@@ -33,6 +35,8 @@ export default function BoardsScreen() {
   const [scaleAnim] = useState(new Animated.Value(0.9));
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const { logout } = useAuth(); // logout関数を取得
+  const flatListRef = useRef<FlatList>(null); // FlatListへの参照
 
   // アニメーション開始
   useEffect(() => {
@@ -83,39 +87,46 @@ export default function BoardsScreen() {
       setNewBoardTitle('');
       setNewBoardDescription('');
       
-      // 成功アニメーション
-      Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 1.05, duration: 100, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
-      ]).start();
+      // リストの最後にスクロール
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+
     } catch (error) {
       console.error('Failed to add board', error);
       Alert.alert('エラー', 'ボードを追加できませんでした。');
     }
   };
 
-  const handleDeleteBoard = async (boardId: number) => {
-    Alert.alert(
-      'ボードを削除',
-      '本当にこのボードを削除しますか？すべてのリストとカードも削除されます。',
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '削除',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiClient.delete(`/api/boards/${boardId}`);
-              const currentBoards = Array.isArray(boards) ? boards : [];
-              setBoards(currentBoards.filter(b => b.id !== boardId));
-            } catch (error) {
-              console.error('Failed to delete board', error);
-              Alert.alert('エラー', 'ボードを削除できませんでした。');
-            }
+  const deleteBoard = async (boardId: number) => {
+    try {
+      await apiClient.delete(`/api/boards/${boardId}`);
+      const currentBoards = Array.isArray(boards) ? boards : [];
+      setBoards(currentBoards.filter(b => b.id !== boardId));
+    } catch (error) {
+      console.error('Failed to delete board', error);
+      Alert.alert('エラー', 'ボードを削除できませんでした。');
+    }
+  };
+
+  const handleDeleteBoard = (boardId: number) => {
+    const message = '本当にこのボードを削除しますか？すべてのリストとカードも削除されます。';
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        deleteBoard(boardId);
+      }
+    } else {
+      Alert.alert(
+        'ボードを削除',
+        message,
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          {
+            text: '削除',
+            style: 'destructive',
+            onPress: () => deleteBoard(boardId),
           }
-        }
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handlePressBoard = (boardId: number) => {
@@ -127,6 +138,47 @@ export default function BoardsScreen() {
   const isGrid = numColumns > 1;
 
   // --- レンダリング ---
+  const renderListHeader = () => (
+    <>
+      {/* ヘッダー */}
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>📋 マイボード</Text>
+        <Text style={styles.headerSubtitle}>
+          プロジェクトを整理して効率的に作業しましょう
+        </Text>
+        <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ボード作成フォーム */}
+      <View style={[styles.formContainer, isGrid && styles.formContainerGrid]}>
+        <Text style={styles.formTitle}>新しいボードを作成</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="ボードのタイトル..."
+            placeholderTextColor="rgba(100, 255, 218, 0.6)"
+            value={newBoardTitle}
+            onChangeText={setNewBoardTitle}
+          />
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="説明（オプション）..."
+            placeholderTextColor="rgba(100, 255, 218, 0.6)"
+            value={newBoardDescription}
+            onChangeText={setNewBoardDescription}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+        <TouchableOpacity style={styles.addButton} onPress={handleAddBoard}>
+          <Text style={styles.addButtonText}>ボードを作成</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
   if (isLoading) {
     return (
       <LinearGradient
@@ -158,42 +210,10 @@ export default function BoardsScreen() {
           }
         ]}
       >
-        {/* ヘッダー */}
-        <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>📋 マイボード</Text>
-          <Text style={styles.headerSubtitle}>
-            プロジェクトを整理して効率的に作業しましょう
-          </Text>
-        </View>
-
-        {/* ボード作成フォーム */}
-        <View style={[styles.formContainer, isGrid && styles.formContainerGrid]}>
-          <Text style={styles.formTitle}>新しいボードを作成</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="ボードのタイトル..."
-              placeholderTextColor="rgba(100, 255, 218, 0.6)"
-              value={newBoardTitle}
-              onChangeText={setNewBoardTitle}
-            />
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="説明（オプション）..."
-              placeholderTextColor="rgba(100, 255, 218, 0.6)"
-              value={newBoardDescription}
-              onChangeText={setNewBoardDescription}
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddBoard}>
-            <Text style={styles.addButtonText}>ボードを作成</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* ボード一覧 */}
         <FlatList
+          ref={flatListRef} // 参照をセット
+          ListHeaderComponent={renderListHeader}
           key={numColumns}
           data={Array.isArray(boards) ? boards : []}
           numColumns={numColumns}
@@ -272,7 +292,6 @@ export default function BoardsScreen() {
     </LinearGradient>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -317,6 +336,20 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  logoutButton: {
+    position: 'absolute',
+    top: 0,
+    right: 20,
+    padding: 10,
+    backgroundColor: 'rgba(100, 255, 218, 0.1)',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(100, 255, 218, 0.2)',
+  },
+  logoutButtonText: {
+    color: '#64ffda',
+    fontWeight: 'bold',
   },
 
   // フォーム

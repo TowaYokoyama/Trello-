@@ -19,19 +19,11 @@ export default function AppLayout() {
   }
 
   return (
-    <Stack>
-      <Stack.Screen
-        name="index"
-        options={{
-          title: 'My Tasks',
-          headerRight: () => (
-            <TouchableOpacity onPress={() => { console.log('Logout button pressed'); logout(); }} style={styles.logoutButton}>
-              <Text style={styles.logoutButtonText}>Logout</Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
-    </Stack>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+      }}
+    />
   );
 }
 
