@@ -60,7 +60,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     width: '100%',
-    alignItems: 'center',
   },
   contentContainerWeb: {
     maxWidth: 400,
@@ -70,6 +69,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 24,
     color: '#1f2937',
+    textAlign: 'center',
   },
   input: {
     width: '100%',
