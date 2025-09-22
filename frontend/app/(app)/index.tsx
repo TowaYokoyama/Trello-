@@ -18,7 +18,7 @@ import apiClient from '../../src/api/client';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useFocusEffect, useRouter } from 'expo-router';
 
-// --- 型定義 ---
+// --- Type Definitions ---
 interface Board {
   id: number;
   title: string;
@@ -26,10 +26,51 @@ interface Board {
   owner_id: number;
 }
 
-export default function BoardsScreen() {
-  const [boards, setBoards] = useState<Board[]>([]);
+interface AddBoardFormProps {
+  onAddBoard: (title: string, description: string | null) => void;
+}
+
+// --- AddBoardForm Component ---
+const AddBoardForm = ({ onAddBoard }: AddBoardFormProps) => {
   const [newBoardTitle, setNewBoardTitle] = useState('');
   const [newBoardDescription, setNewBoardDescription] = useState('');
+
+  const handlePress = () => {
+    onAddBoard(newBoardTitle, newBoardDescription);
+    setNewBoardTitle('');
+    setNewBoardDescription('');
+  };
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>新しいボードを作成</Text>
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="ボードのタイトル..."
+          placeholderTextColor="rgba(100, 255, 218, 0.6)"
+          value={newBoardTitle}
+          onChangeText={setNewBoardTitle}
+        />
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="説明（オプション）..."
+          placeholderTextColor="rgba(100, 255, 218, 0.6)"
+          value={newBoardDescription}
+          onChangeText={setNewBoardDescription}
+          multiline
+          numberOfLines={3}
+        />
+      </View>
+      <TouchableOpacity style={styles.addButton} onPress={handlePress}>
+        <Text style={styles.addButtonText}>ボードを作成</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+export default function BoardsScreen() {
+  const [boards, setBoards] = useState<Board[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.9));
@@ -60,20 +101,18 @@ export default function BoardsScreen() {
 
   useFocusEffect(useCallback(() => { fetchBoards(); }, []));
 
-  const handleAddBoard = async () => {
-    if (newBoardTitle.trim() === '') {
+  const handleAddBoard = async (title: string, description: string | null) => {
+    if (title.trim() === '') {
       Alert.alert('エラー', 'ボードタイトルを入力してください。');
       return;
     }
     try {
       const response = await apiClient.post<Board>('/api/boards/', { 
-        title: newBoardTitle,
-        description: newBoardDescription || null,
+        title: title,
+        description: description || null,
       });
       const currentBoards = Array.isArray(boards) ? boards : [];
       setBoards([...currentBoards, response.data]);
-      setNewBoardTitle('');
-      setNewBoardDescription('');
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (error) {
       console.error('Failed to add board', error);
@@ -121,16 +160,7 @@ export default function BoardsScreen() {
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.formContainer}>
-        <Text style={styles.formTitle}>新しいボードを作成</Text>
-        <View style={styles.inputContainer}>
-          <TextInput style={styles.input} placeholder="ボードのタイトル..." placeholderTextColor="rgba(100, 255, 218, 0.6)" value={newBoardTitle} onChangeText={setNewBoardTitle} />
-          <TextInput style={[styles.input, styles.textArea]} placeholder="説明（オプション）..." placeholderTextColor="rgba(100, 255, 218, 0.6)" value={newBoardDescription} onChangeText={setNewBoardDescription} multiline numberOfLines={3} />
-        </View>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddBoard}>
-          <Text style={styles.addButtonText}>ボードを作成</Text>
-        </TouchableOpacity>
-      </View>
+      <AddBoardForm onAddBoard={handleAddBoard} />
     </View>
   );
 
@@ -151,7 +181,7 @@ export default function BoardsScreen() {
         ref={flatListRef}
         ListHeaderComponent={renderListHeader}
         data={Array.isArray(boards) ? boards : []}
-        key={numColumns}
+        //key={numColumns}
         numColumns={numColumns}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContentContainer}
