@@ -8,6 +8,7 @@ interface Card {
   description: string | null;
   completed: boolean;
   list_id: number;
+  due_date: string | null;
 }
 
 interface List {
@@ -19,7 +20,7 @@ interface List {
 
 interface BoardProps {
   lists: List[];
-  onCardPress: (card: Card, listId: number) => void;
+  onCardPress: (card: Card) => void;
   getListEmoji: (index: number) => string;
   handleDeleteList: (listId: number) => void;
   handleAddCard: (listId: number, cardTitle: string) => void;
@@ -29,7 +30,7 @@ interface BoardProps {
 
 interface CardItemProps {
   card: Card;
-  onCardPress: (card: Card, listId: number) => void;
+  onCardPress: (card: Card) => void;
   listId: number;
   onToggle: () => void;
   onDelete: () => void;
@@ -68,15 +69,24 @@ const AddCardInput = ({ listId, handleAddCard }: AddCardInputProps) => {
 
 // --- Card Component ---
 const CardItem = ({ card, onCardPress, listId, onToggle, onDelete }: CardItemProps) => {
+  const formattedDate = card.due_date ? new Date(card.due_date).toLocaleDateString() : null;
+
   return (
-    <TouchableOpacity onPress={() => onCardPress(card, listId)} style={styles.cardItem}>
+    <TouchableOpacity onPress={() => onCardPress(card)} style={styles.cardItem}>
       <View style={styles.cardContent}>
         <TouchableOpacity onPress={(e) => { e.stopPropagation(); onToggle(); }}>
           <View style={[styles.checkbox, card.completed && styles.checkboxCompleted]}>
             {card.completed && <Text style={styles.checkmark}>✓</Text>}
           </View>
         </TouchableOpacity>
-        <Text style={[styles.cardText, card.completed && styles.cardTextCompleted]}>{card.title}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.cardText, card.completed && styles.cardTextCompleted]}>{card.title}</Text>
+          {formattedDate && (
+            <View style={styles.dueDateContainer}>
+              <Text style={styles.dueDateText}>📅 {formattedDate}</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity onPress={(e) => { e.stopPropagation(); onDelete(); }} style={styles.deleteCardButton}>
           <Text style={styles.deleteCardButtonText}>✕</Text>
         </TouchableOpacity>
@@ -164,6 +174,14 @@ const styles = StyleSheet.create({
   cardContent: { flexDirection: 'row', alignItems: 'center' },
   cardText: { flex: 1, fontSize: 16, color: '#1a1a2e', fontWeight: '600', lineHeight: 22 },
   cardTextCompleted: { textDecorationLine: 'line-through', color: '#6B7280' },
+  dueDateContainer: {
+    marginTop: 8,
+  },
+  dueDateText: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '500',
+  },
   checkbox: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#64ffda', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   checkboxCompleted: { backgroundColor: '#4caf50', borderColor: '#4caf50' },
   checkmark: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },

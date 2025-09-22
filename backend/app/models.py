@@ -1,6 +1,6 @@
 # backend/app/models.py
 
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 
 # database.pyで作成したBaseクラスをインポートします。
@@ -61,6 +61,7 @@ class Card(Base):
     title = Column(String, index=True)
     description = Column(String, index=True, nullable=True)
     completed = Column(Boolean, default=False)
+    due_date = Column(DateTime, nullable=True, index=True)
 
     list_id = Column(Integer, ForeignKey("lists.id"))
     list = relationship("List", back_populates="cards")

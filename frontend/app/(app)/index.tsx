@@ -232,11 +232,48 @@ const styles = StyleSheet.create({
   loadingText: { color: '#64ffda', fontSize: 16, marginTop: 16, fontWeight: '500' },
   headerAndFormContainer: { alignItems: 'center', paddingTop: 60 },
   headerContainer: { alignItems: 'center', marginBottom: 40, paddingHorizontal: 20, width: '100%' },
-  headerTitle: { fontSize: 36, fontWeight: 'bold', color: '#64ffda', textAlign: 'center', marginBottom: 8, textShadowColor: 'rgba(100, 255, 218, 0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 10 },
+  headerTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#64ffda',
+    textAlign: 'center',
+    marginBottom: 8,
+    ...Platform.select({
+      web: {
+        textShadow: '0px 2px 10px rgba(100, 255, 218, 0.3)',
+      },
+      native: {
+        textShadowColor: 'rgba(100, 255, 218, 0.3)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 10,
+      }
+    })
+  },
   headerSubtitle: { fontSize: 16, color: 'rgba(255, 255, 255, 0.7)', textAlign: 'center', lineHeight: 22 },
   logoutButton: { position: 'absolute', top: 0, right: 20, padding: 10, backgroundColor: 'rgba(100, 255, 218, 0.1)', borderRadius: 15, borderWidth: 1, borderColor: 'rgba(100, 255, 218, 0.2)' },
   logoutButtonText: { color: '#64ffda', fontWeight: 'bold' },
-  formContainer: { width: '90%', maxWidth: 400, marginBottom: 30, backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 25, padding: 25, borderWidth: 1, borderColor: 'rgba(100, 255, 218, 0.2)', shadowColor: '#64ffda', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
+  formContainer: {
+    width: '90%',
+    maxWidth: 400,
+    marginBottom: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 25,
+    padding: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(100, 255, 218, 0.2)',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 10px rgba(100, 255, 218, 0.3)',
+      },
+      native: {
+        shadowColor: '#64ffda',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 8,
+      }
+    })
+  },
   formTitle: { fontSize: 20, fontWeight: 'bold', color: '#64ffda', marginBottom: 20, textAlign: 'center' },
   inputContainer: { marginBottom: 20 },
   input: { backgroundColor: 'rgba(100, 255, 218, 0.1)', borderWidth: 1, borderColor: 'rgba(100, 255, 218, 0.3)', borderRadius: 15, padding: 15, marginBottom: 15, color: '#64ffda', fontSize: 16, fontWeight: '500' },
@@ -245,7 +282,27 @@ const styles = StyleSheet.create({
   addButtonText: { color: '#64ffda', fontSize: 18, fontWeight: 'bold' },
   listContentContainer: { padding: 20 },
   boardItemContainer: { flex: 1, margin: 8 },
-  boardItem: { backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(100, 255, 218, 0.2)', shadowColor: '#64ffda', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8, overflow: 'hidden', minHeight: 120 },
+  boardItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(100, 255, 218, 0.2)',
+    overflow: 'hidden',
+    minHeight: 120,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 6px 12px rgba(100, 255, 218, 0.3)',
+      },
+      native: {
+        shadowColor: '#64ffda',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
+      }
+    })
+  },
   boardItemGrid: { minHeight: 180 },
   boardGradientOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   boardGradient: { flex: 1 },

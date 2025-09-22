@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
 
 # --- Card Schemas --- (旧 Task Schemas)
 # 下でListスキーマを定義するため、先にCard関連を定義します。
@@ -12,6 +13,7 @@ class CardBase(BaseModel):
     """
     title: str
     description: Optional[str] = None
+    due_date: Optional[datetime] = None
 
 
 class CardCreate(CardBase):
@@ -30,6 +32,7 @@ class CardUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None
+    due_date: Optional[datetime] = None
 
 
 class Card(CardBase):
@@ -39,6 +42,7 @@ class Card(CardBase):
     id: int
     completed: bool
     list_id: int  # どのリストに属するかを示すID
+    due_date: Optional[datetime] = None
 
     class Config:
         # ORMモデルからPydanticモデルへの変換を可能にします。

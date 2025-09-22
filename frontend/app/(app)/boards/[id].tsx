@@ -40,6 +40,7 @@ interface Card {
   description: string | null;
   completed: boolean;
   list_id: number;
+  due_date: string | null;
 }
 
 interface AddListFormProps {
@@ -85,10 +86,12 @@ export default function BoardDetailScreen() {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
 
-
-  // For card moving modal
-  const [isMoveModalVisible, setMoveModalVisible] = useState(false);
-  const [cardToMove, setCardToMove] = useState<{ card: Card; fromListId: number } | null>(null);
+  // For card editing modal
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedDescription, setEditedDescription] = useState('');
+  const [editedDueDate, setEditedDueDate] = useState('');
 
   useEffect(() => {
     Animated.parallel([
@@ -178,78 +181,87 @@ export default function BoardDetailScreen() {
     return emojis[index % emojis.length];
   };
 
-  const handleCardPress = (card: Card, fromListId: number) => {
-    setCardToMove({ card, fromListId });
-    setMoveModalVisible(true);
+  const handleCardPress = (card: Card) => {
+    setSelectedCard(card);
+    setEditedTitle(card.title);
+    setEditedDescription(card.description || '');
+    setEditedDueDate(card.due_date || '');
+    setEditModalVisible(true);
   };
 
-  const moveCard = (toListId: number) => {
-    if (!cardToMove) return;
-    const { card, fromListId } = cardToMove;
-    if (fromListId === toListId) {
-      setMoveModalVisible(false);
-      setCardToMove(null);
-      return;
+  const handleUpdateCard = async () => {
+    if (!selectedCard) return;
+
+    const updatedData = {
+      title: editedTitle,
+      description: editedDescription,
+      due_date: editedDueDate || null,
+    };
+
+    try {
+      const response = await apiClient.put<Card>(`/api/cards/${selectedCard.id}`, updatedData);
+      const updatedCard = response.data;
+
+      setLists(prevLists =>
+        prevLists.map(list =>
+          list.id === selectedCard.list_id
+            ? { ...list, cards: list.cards.map(c => c.id === selectedCard.id ? updatedCard : c) }
+            : list
+        )
+      );
+      setEditModalVisible(false);
+      setSelectedCard(null);
+    } catch (error) {
+      console.error('Failed to update card', error);
+      if (Platform.OS === 'web') {
+        alert('エラー: カードを更新できませんでした。');
+      } else {
+        Alert.alert('エラー', 'カードを更新できませんでした。');
+      }
     }
-
-    setLists(prevLists => {
-      let movedCard: Card | undefined;
-      const listsWithoutCard = prevLists.map(list => {
-        if (list.id === fromListId) {
-          movedCard = list.cards.find(c => c.id === card.id);
-          return { ...list, cards: list.cards.filter(c => c.id !== card.id) };
-        }
-        return list;
-      });
-
-      const listsWithCard = listsWithoutCard.map(list => {
-        if (list.id === toListId && movedCard) {
-          return { ...list, cards: [...list.cards, movedCard] };
-        }
-        return list;
-      });
-
-      return listsWithCard;
-    });
-
-    setMoveModalVisible(false);
-    setCardToMove(null);
   };
 
-const handleToggleCardComplete = (listId: number, card: Card) => {
-  setLists(prevLists =>
-    prevLists.map(list =>
-      list.id === listId
-        ? {
-            ...list,
-            cards: list.cards.map(c =>
-              c.id === card.id ? { ...c, completed: !c.completed } : c
-            ),
-          }
-        : list
-    )
-  );
-};
+  const handleToggleCardComplete = async (listId: number, card: Card) => {
+    try {
+      const updatedCard = { ...card, completed: !card.completed };
+      await apiClient.put(`/api/cards/${card.id}`, { completed: updatedCard.completed });
 
-const handleDeleteCard = async (listId: number, cardId: number) => {
-  try {
-    await apiClient.delete(`/api/cards/${cardId}`);
-    setLists(prevLists =>
-      prevLists.map(list =>
-        list.id === listId
-          ? { ...list, cards: list.cards.filter(card => card.id !== cardId) }
-          : list
-      )
-    );
-  } catch (error) {
-    console.error('Failed to delete card', error);
-    if (Platform.OS === 'web') {
-      alert('エラー: カードを削除できませんでした。');
-    } else {
-      Alert.alert('エラー', 'カードを削除できませんでした。');
+      setLists(prevLists =>
+        prevLists.map(list =>
+          list.id === listId
+            ? { ...list, cards: list.cards.map(c => (c.id === card.id ? updatedCard : c)) }
+            : list
+        )
+      );
+    } catch (err) {
+      console.error("Update card error:", err);
+      if (Platform.OS === 'web') {
+        alert("エラー: カードの状態を更新できませんでした。");
+      } else {
+        Alert.alert("エラー", "カードの状態を更新できませんでした。");
+      }
     }
-  }
-};
+  };
+
+  const handleDeleteCard = async (listId: number, cardId: number) => {
+    try {
+      await apiClient.delete(`/api/cards/${cardId}`);
+      setLists(prevLists =>
+        prevLists.map(list =>
+          list.id === listId
+            ? { ...list, cards: list.cards.filter(card => card.id !== cardId) }
+            : list
+        )
+      );
+    } catch (error) {
+      console.error('Failed to delete card', error);
+      if (Platform.OS === 'web') {
+        alert('エラー: カードを削除できませんでした。');
+      } else {
+        Alert.alert('エラー', 'カードを削除できませんでした。');
+      }
+    }
+  };
 
   if (isLoading && !board) {
     return (
@@ -264,28 +276,45 @@ const handleDeleteCard = async (listId: number, cardId: number) => {
     <LinearGradient colors={['#1a1a2e', '#16213e', '#0f3460']} style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={isMoveModalVisible}
-        onRequestClose={() => setMoveModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>移動先のリストを選択</Text>
-            {lists
-              .filter(list => list.id !== cardToMove?.fromListId)
-              .map(list => (
-                <TouchableOpacity key={list.id} style={styles.modalButton} onPress={() => moveCard(list.id)}>
-                  <Text style={styles.modalButtonText}>{list.title}</Text>
-                </TouchableOpacity>
-              ))}
-            <TouchableOpacity style={[styles.modalButton, styles.modalCancelButton]} onPress={() => setMoveModalVisible(false)}>
-              <Text style={styles.modalButtonText}>キャンセル</Text>
-            </TouchableOpacity>
+      {selectedCard && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={isEditModalVisible}
+          onRequestClose={() => setEditModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>カードを編集</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editedTitle}
+                onChangeText={setEditedTitle}
+                placeholder="カードのタイトル"
+              />
+              <TextInput
+                style={[styles.modalInput, styles.modalInputDescription]}
+                value={editedDescription}
+                onChangeText={setEditedDescription}
+                placeholder="説明"
+                multiline
+              />
+              <TextInput
+                style={styles.modalInput}
+                value={editedDueDate}
+                onChangeText={setEditedDueDate}
+                placeholder="期限日 (YYYY-MM-DD HH:MM:SS)"
+              />
+              <TouchableOpacity style={styles.modalButton} onPress={handleUpdateCard}>
+                <Text style={styles.modalButtonText}>保存</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.modalCancelButton]} onPress={() => setEditModalVisible(false)}>
+                <Text style={styles.modalButtonText}>キャンセル</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Animated.View style={[{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -317,6 +346,7 @@ const handleDeleteCard = async (listId: number, cardId: number) => {
   );
 }
 
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContainer: { paddingTop: 60, paddingHorizontal: 20 },
@@ -342,7 +372,28 @@ const styles = StyleSheet.create({
   },
   boardDescription: { fontSize: 18, color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', lineHeight: 26, paddingHorizontal: 20 },
   addListContainer: { marginBottom: 30, alignItems: 'center' },
-  addListInputContainer: { flexDirection: 'row', backgroundColor: 'rgba(100, 255, 218, 0.1)', borderRadius: 25, paddingHorizontal: 20, paddingVertical: 5, width: '95%', borderWidth: 1, borderColor: 'rgba(100, 255, 218, 0.3)', shadowColor: '#64ffda', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
+  addListInputContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(100, 255, 218, 0.1)',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 5,
+    width: '95%',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 255, 218, 0.3)',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 10px rgba(100, 255, 218, 0.3)',
+      },
+      native: {
+        shadowColor: '#64ffda',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 8,
+      }
+    })
+  },
   addListInput: { flex: 1, color: '#64ffda', fontSize: 16, paddingVertical: 15, fontWeight: '500' },
   addListButton: { backgroundColor: 'rgba(100, 255, 218, 0.2)', borderRadius: 20, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
   addListButtonText: { fontSize: 22 },
@@ -353,10 +404,41 @@ const styles = StyleSheet.create({
   circle3: { width: 150, height: 150, top: 300, right: 50, backgroundColor: 'rgba(255, 20, 147, 0.1)' },
   // Modal Styles
   modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.7)' },
-  modalContent: { backgroundColor: '#1a1a2e', borderRadius: 20, padding: 35, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, width: '80%' },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 20,
+    padding: 35,
+    alignItems: 'center',
+    width: '80%',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.25)',
+      },
+      native: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+      }
+    })
+  },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#64ffda', marginBottom: 25 },
   modalButton: { backgroundColor: 'rgba(100, 255, 218, 0.2)', borderRadius: 10, padding: 15, width: '100%', marginBottom: 10 },
   modalButtonText: { color: '#64ffda', fontWeight: 'bold', textAlign: 'center', fontSize: 16 },
   modalCancelButton: { backgroundColor: 'rgba(255, 82, 82, 0.2)',
   marginTop: 10 },
+  modalInput: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 15,
+    color: '#fff',
+    fontSize: 16,
+    marginBottom: 15,
+  },
+  modalInputDescription: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
 });
