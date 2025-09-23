@@ -18,6 +18,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
 
     boards = relationship("Board", back_populates="owner")
+    push_tokens = relationship("PushToken", back_populates="user")
 
 
 class Board(Base):
@@ -65,4 +66,14 @@ class Card(Base):
 
     list_id = Column(Integer, ForeignKey("lists.id"))
     list = relationship("List", back_populates="cards")
+
+
+class PushToken(Base):
+    __tablename__ = "push_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, nullable=False)
+
+    user = relationship("User", back_populates="push_tokens")
 

@@ -1,5 +1,11 @@
 {
   "devDependencies": {
     "@types/react-native": "^0.72.8"
+  },
+  "dependencies": {
+    "@react-native-community/datetimepicker": "8.4.4",
+    "expo": "^54.0.10",
+    "expo-notifications": "~0.32.11",
+    "typescript": "~5.9.2"
   }
 }

@@ -4,6 +4,8 @@ from fastapi import Depends, FastAPI, HTTPException, status, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from pydantic import BaseModel # Import BaseModel
+import requests # Add this
 
 from . import crud, models, schemas, auth
 from .database import SessionLocal, engine
@@ -36,6 +38,13 @@ def get_db():
         db.close()
 
 
+# New Pydantic model for test notification request
+class TestNotificationRequest(BaseModel):
+    token: str
+    title: str
+    body: str
+
+
 # --- 認証関連のエンドポイント ---
 
 @router.post("/auth/login", response_model=schemas.Token)
@@ -62,6 +71,40 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 @router.get("/users/me", response_model=schemas.User)
 def read_users_me(current_user: schemas.User = Depends(auth.get_current_user)):
     return current_user
+
+
+# New endpoint for sending test notifications
+@router.post("/send-test-notification")
+async def send_test_notification(request: TestNotificationRequest):
+    try:
+        response = requests.post(
+            "https://exp.host/--/api/v2/push/send",
+            headers={
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip, deflate",
+                "Content-Type": "application/json",
+            },
+            json={
+                "to": request.token,
+                "title": request.title,
+                "body": request.body,
+            },
+        )
+        response.raise_for_status() # Raise an exception for HTTP errors
+        return {"message": "Notification sent successfully!", "details": response.json()}
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send notification: {e}")
+
+
+# --- Board エンドポイント ---
+
+@router.post("/boards/", response_model=schemas.Board)
+def create_board_for_current_user(
+    board: schemas.BoardCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    return crud.create_user_board(db=db, board=board, user_id=current_user.id)
 
 
 # --- Board エンドポイント ---
@@ -254,5 +297,16 @@ def delete_card(
     if db_card is None or db_card.list.board.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Card not found or not owned by user")
     return crud.delete_card(db=db, db_card=db_card)
+
+
+# --- PushToken エンドポイント ---
+
+@router.post("/users/me/push-tokens", response_model=schemas.PushToken)
+def register_push_token(
+    token: schemas.PushTokenCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    return crud.create_user_push_token(db=db, token=token, user_id=current_user.id)
 
 app.include_router(router)

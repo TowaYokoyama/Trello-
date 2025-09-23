@@ -144,6 +144,23 @@ class User(UserBase):
     # user.boards (models.pyで定義したrelationship) からデータを取得し、
     # この'boards'フィールドにBoardスキーマのリストとして設定してくれます。
     boards: List[Board] = []
+    push_tokens: List['PushToken'] = []
+
+    class Config:
+        from_attributes = True
+
+
+# --- PushToken Schemas ---
+
+class PushTokenBase(BaseModel):
+    token: str
+
+class PushTokenCreate(PushTokenBase):
+    pass
+
+class PushToken(PushTokenBase):
+    id: int
+    user_id: int
 
     class Config:
         from_attributes = True

@@ -4,7 +4,11 @@
     "strict": true,
     "module": "ESNext",
     "typeRoots": ["./node_modules/@types", "./"],
-    "types": ["react", "react-native"]
+    "types": ["react", "react-native"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
   "include": [
     "**/*.ts",

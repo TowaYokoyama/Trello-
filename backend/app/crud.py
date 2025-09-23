@@ -205,3 +205,20 @@ def delete_card(db: Session, *, db_card: models.Card) -> models.Card:
     db.delete(db_card)
     db.commit()
     return db_card
+
+
+# --- PushToken CRUD ---
+
+def get_push_token(db: Session, token: str):
+    return db.query(models.PushToken).filter(models.PushToken.token == token).first()
+
+
+def create_user_push_token(db: Session, token: schemas.PushTokenCreate, user_id: int):
+    db_token = get_push_token(db, token.token)
+    if db_token:
+        return db_token
+    db_token = models.PushToken(token=token.token, user_id=user_id)
+    db.add(db_token)
+    db.commit()
+    db.refresh(db_token)
+    return db_token

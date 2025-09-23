@@ -3,6 +3,8 @@ uvicorn[standard]
 psycopg2-binary
 redis
 celery
+fastapi-utils
+requests
 
 # For authentication and database
 python-jose[cryptography]

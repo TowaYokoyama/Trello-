@@ -11,7 +11,8 @@ import {
   StyleSheet,
   useWindowDimensions,
   Animated,
-  StatusBar
+  StatusBar,
+  Modal
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import apiClient from '../../src/api/client';
@@ -19,11 +20,28 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 // --- Type Definitions ---
+interface Card {
+  id: number;
+  title: string;
+  description: string | null;
+  completed: boolean;
+  list_id: number;
+  due_date: string | null;
+}
+
+interface List {
+  id: number;
+  title: string;
+  board_id: number;
+  cards: Card[];
+}
+
 interface Board {
   id: number;
   title: string;
   description: string | null;
   owner_id: number;
+  lists: List[];
 }
 
 interface AddBoardFormProps {
@@ -72,6 +90,8 @@ const AddBoardForm = ({ onAddBoard }: AddBoardFormProps) => {
 export default function BoardsScreen() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [isNotificationsVisible, setNotificationsVisible] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.9));
   const router = useRouter();
@@ -100,6 +120,26 @@ export default function BoardsScreen() {
   };
 
   useFocusEffect(useCallback(() => { fetchBoards(); }, []));
+
+  useEffect(() => {
+    const newNotifications: any[] = [];
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // Set to end of today
+
+    boards.forEach(board => {
+      board.lists.forEach(list => {
+        list.cards.forEach(card => {
+          if (card.due_date && !card.completed) {
+            const dueDate = new Date(card.due_date);
+            if (dueDate <= today) {
+              newNotifications.push({ ...card, boardTitle: board.title, boardId: board.id });
+            }
+          }
+        });
+      });
+    });
+    setNotifications(newNotifications);
+  }, [boards]);
 
   const handleAddBoard = async (title: string, description: string | null) => {
     if (title.trim() === '') {
@@ -159,10 +199,23 @@ export default function BoardsScreen() {
         <TouchableOpacity onPress={logout} style={styles.logoutButton}>
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => setNotificationsVisible(true)} style={styles.notificationButton}>
+          <Text style={styles.notificationIcon}>🔔</Text>
+          {notifications.length > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>{notifications.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
       <AddBoardForm onAddBoard={handleAddBoard} />
     </View>
   );
+
+  const handleNotificationPress = (boardId: number) => {
+    setNotificationsVisible(false);
+    router.push(`/boards/${boardId}`);
+  };
 
   if (isLoading) {
     return (
@@ -177,6 +230,33 @@ export default function BoardsScreen() {
   return (
     <LinearGradient colors={['#1a1a2e', '#16213e', '#0f3460']} style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isNotificationsVisible}
+        onRequestClose={() => setNotificationsVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>期限切れ・期限間近のカード</Text>
+            <FlatList
+              data={notifications}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.notificationItem} onPress={() => handleNotificationPress(item.boardId)}>
+                  <Text style={styles.notificationItemTitle}>{item.title}</Text>
+                  <Text style={styles.notificationItemSubtitle}>ボード: {item.boardTitle}</Text>
+                  <Text style={styles.notificationItemSubtitle}>期限: {new Date(item.due_date).toLocaleDateString()}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>通知はありません</Text>}
+            />
+            <TouchableOpacity style={[styles.modalButton, styles.modalCancelButton]} onPress={() => setNotificationsVisible(false)}>
+              <Text style={styles.modalButtonText}>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <FlatList
         ref={flatListRef}
         ListHeaderComponent={renderListHeader}
@@ -323,4 +403,96 @@ const styles = StyleSheet.create({
   circle1: { width: 300, height: 300, top: 100, left: -100 },
   circle2: { width: 250, height: 250, bottom: 200, right: -80, backgroundColor: 'rgba(138, 43, 226, 0.05)' },
   circle3: { width: 200, height: 200, top: 400, right: 20, backgroundColor: 'rgba(255, 20, 147, 0.05)' },
+  notificationButton: {
+    position: 'absolute',
+    top: 0,
+    left: 20,
+    padding: 10,
+  },
+  notificationIcon: {
+    fontSize: 24,
+    color: '#fff',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    right: 5,
+    top: 5,
+    backgroundColor: 'red',
+    borderRadius: 9,
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 20,
+    padding: 35,
+    alignItems: 'center',
+    width: '90%',
+    maxWidth: 500,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.25)',
+      },
+      native: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+      }
+    })
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#64ffda',
+    marginBottom: 25,
+  },
+  modalButton: {
+    backgroundColor: 'rgba(100, 255, 218, 0.2)',
+    borderRadius: 10,
+    padding: 15,
+    width: '100%',
+    marginBottom: 10,
+  },
+  modalButtonText: {
+    color: '#64ffda',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    fontSize: 16,
+  },
+  modalCancelButton: {
+    backgroundColor: 'rgba(255, 82, 82, 0.2)',
+    marginTop: 10,
+  },
+  notificationItem: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+  },
+  notificationItemTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  notificationItemSubtitle: {
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 4,
+  },
 });

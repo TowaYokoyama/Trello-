@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import apiClient from '../../../src/api/client';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 import BoardComponent from '../../../src/components/board/Board';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // --- Type Definitions ---
 interface BoardType {
@@ -91,7 +92,9 @@ export default function BoardDetailScreen() {
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
-  const [editedDueDate, setEditedDueDate] = useState('');
+  const [editedDueDate, setEditedDueDate] = useState<Date | null>(null);
+  const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
 
   useEffect(() => {
     Animated.parallel([
@@ -185,7 +188,8 @@ export default function BoardDetailScreen() {
     setSelectedCard(card);
     setEditedTitle(card.title);
     setEditedDescription(card.description || '');
-    setEditedDueDate(card.due_date || '');
+    const initialDueDate = card.due_date ? new Date(card.due_date) : new Date();
+    setEditedDueDate(initialDueDate);
     setEditModalVisible(true);
   };
 
@@ -263,6 +267,22 @@ export default function BoardDetailScreen() {
     }
   };
 
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setDatePickerVisible(false);
+    if (selectedDate) {
+      setEditedDueDate(selectedDate);
+    }
+  };
+
+  const showDatePicker = (mode: 'date' | 'time') => {
+    setDatePickerMode(mode);
+    setDatePickerVisible(true);
+  };
+
+  const clearDueDate = () => {
+    setEditedDueDate(null);
+  };
+
   if (isLoading && !board) {
     return (
       <LinearGradient colors={['#1a1a2e', '#16213e', '#0f3460']} style={styles.loadingContainer}>
@@ -271,6 +291,19 @@ export default function BoardDetailScreen() {
       </LinearGradient>
     );
   }
+
+  function formatDateForInput(date: Date): React.ReactNode {
+    // Format as YYYY/MM/DD (or with time if needed)
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    const hours = `${date.getHours()}`.padStart(2, '0');
+    const minutes = `${date.getMinutes()}`.padStart(2, '0');
+    // Show time only if not midnight
+    const showTime = date.getHours() !== 0 || date.getMinutes() !== 0;
+    return `${year}/${month}/${day}${showTime ? ` ${hours}:${minutes}` : ''}`;
+  }
+
 
   return (
     <LinearGradient colors={['#1a1a2e', '#16213e', '#0f3460']} style={styles.container}>
@@ -299,12 +332,24 @@ export default function BoardDetailScreen() {
                 placeholder="説明"
                 multiline
               />
-              <TextInput
-                style={styles.modalInput}
-                value={editedDueDate}
-                onChangeText={setEditedDueDate}
-                placeholder="期限日 (YYYY-MM-DD HH:MM:SS)"
-              />
+              <TouchableOpacity onPress={() => showDatePicker('date')} style={styles.modalInput}>
+                <Text style={editedDueDate ? styles.modalInputText : styles.modalInputPlaceholder}>
+                  {editedDueDate ? formatDateForInput(editedDueDate) : "期限日を設定"}
+                </Text>
+              </TouchableOpacity>
+              {editedDueDate && (
+                <TouchableOpacity onPress={clearDueDate} style={styles.clearDueDateButton}>
+                  <Text style={styles.clearDueDateButtonText}>期限日をクリア</Text>
+                </TouchableOpacity>
+              )}
+              {isDatePickerVisible && (
+                <DateTimePicker
+                  value={editedDueDate || new Date()}
+                  mode={datePickerMode}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={onDateChange}
+                />
+              )}
               <TouchableOpacity style={styles.modalButton} onPress={handleUpdateCard}>
                 <Text style={styles.modalButtonText}>保存</Text>
               </TouchableOpacity>
@@ -322,6 +367,13 @@ export default function BoardDetailScreen() {
             <Text style={styles.boardTitle}>{board?.title}</Text>
             {board?.description && <Text style={styles.boardDescription}>{board.description}</Text>}
           </View>
+
+          <TouchableOpacity 
+          style={styles.calendarButton}
+          onPress={()=> router.push('/calendar')}
+          >
+            <Text>カレンダーを見る</Text>
+          </TouchableOpacity>
 
           <AddListForm handleAddList={handleAddList} />
 
@@ -353,6 +405,15 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#64ffda', fontSize: 18, marginTop: 20, fontWeight: '600' },
   header: { alignItems: 'center', marginBottom: 30 },
+  calendarButton: {
+    backgroundColor: 'rgba(100, 255, 218, 0.15)',
+    borderRadius: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignSelf: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
   boardTitle: {
     fontSize: 36,
     fontWeight: 'bold',
@@ -440,5 +501,24 @@ const styles = StyleSheet.create({
   modalInputDescription: {
     height: 100,
     textAlignVertical: 'top',
+  },
+  modalInputText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  modalInputPlaceholder: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 16,
+  },
+  clearDueDateButton: {
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 15,
+  },
+  clearDueDateButtonText: {
+    color: '#ff5252',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
