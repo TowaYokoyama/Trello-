@@ -1,18 +1,17 @@
 import React, { useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 
 export default function AppLayout() {
   const { token, isLoading, logout } = useAuth();
   const router = useRouter();
 
-  // このuseEffectは、app/index.tsxにリダイレクトロジックを移管したため不要になります。
-  // useEffect(() => {
-  //   if (!isLoading && !token) {
-  //     router.replace('/login');
-  //   }
-  // }, [isLoading, token, router]);
+  useEffect(() => {
+    if (!isLoading && !token) {
+      router.replace('/login');
+    }
+  }, [isLoading, token, router]);
 
   if (isLoading) {
     return null;

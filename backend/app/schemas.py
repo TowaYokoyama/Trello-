@@ -13,6 +13,7 @@ class CardBase(BaseModel):
     """
     title: str
     description: Optional[str] = None
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
 
 
@@ -32,6 +33,7 @@ class CardUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
 
 
@@ -42,6 +44,7 @@ class Card(CardBase):
     id: int
     completed: bool
     list_id: int  # どのリストに属するかを示すID
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
 
     class Config:
@@ -86,11 +89,9 @@ class ListSchema(ListBase):
 # --- Board Schemas ---
 
 class BoardBase(BaseModel):
-    """
-    ボード情報の基本となるスキーマ。
-    """
     title: str
     description: Optional[str] = None
+    color: Optional[str] = None
 
 
 class BoardCreate(BoardBase):
@@ -101,12 +102,9 @@ class BoardCreate(BoardBase):
 
 
 class BoardUpdate(BaseModel):
-    """
-    ボード更新時にAPIが受け取るデータのためのスキーマ。
-    全てのフィールドをOptionalにすることで、一部のフィールドのみの更新を可能にします。
-    """
     title: Optional[str] = None
     description: Optional[str] = None
+    color: Optional[str] = None
 
 
 class Board(BoardBase):
@@ -115,6 +113,7 @@ class Board(BoardBase):
     """
     id: int
     owner_id: int  # どのユーザーに属するかを示すID
+    color: Optional[str] = None
     lists: List[ListSchema] = []  # このボードが持つリストのリスト
 
 

@@ -2,6 +2,7 @@
 
 from sqlalchemy.orm import Session
 from typing import Any, Dict, Union, List
+import random
 
 # 関連するモデルとスキーマ、認証関連の関数をインポートします。
 from . import models, schemas, auth
@@ -53,7 +54,13 @@ def create_user_board(db: Session, board: schemas.BoardCreate, user_id: int) -> 
     """
     特定のユーザーのために新しいボードをデータベースに作成します。
     """
-    db_board = models.Board(**board.dict(), owner_id=user_id)
+    board_data = board.dict()
+    if not board_data.get("color"):
+        # ランダムな明るい色を生成
+        r = lambda: random.randint(128, 224)
+        board_data["color"] = f"#{r():02x}{r():02x}{r():02x}"
+        
+    db_board = models.Board(**board_data, owner_id=user_id)
     db.add(db_board)
     db.commit()
     db.refresh(db_board)

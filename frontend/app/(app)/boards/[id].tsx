@@ -19,6 +19,9 @@ import apiClient from '../../../src/api/client';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 import BoardComponent from '../../../src/components/board/Board';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import SimpleWebDatePicker from '@/components/common/SimpleWebDatePicker.web';
+
+
 
 // --- Type Definitions ---
 interface BoardType {
@@ -188,7 +191,7 @@ export default function BoardDetailScreen() {
     setSelectedCard(card);
     setEditedTitle(card.title);
     setEditedDescription(card.description || '');
-    const initialDueDate = card.due_date ? new Date(card.due_date) : new Date();
+    const initialDueDate = card.due_date ? new Date(card.due_date) : null;
     setEditedDueDate(initialDueDate);
     setEditModalVisible(true);
   };
@@ -263,6 +266,24 @@ export default function BoardDetailScreen() {
         alert('エラー: カードを削除できませんでした。');
       } else {
         Alert.alert('エラー', 'カードを削除できませんでした。');
+      }
+    }
+  };
+
+  const handleUpdateListTitle = async (listId: number, newTitle: string) => {
+    try {
+      await apiClient.put(`/api/lists/${listId}`, { title: newTitle });
+      setLists(prevLists =>
+        prevLists.map(list =>
+          list.id === listId ? { ...list, title: newTitle } : list
+        )
+      );
+    } catch (error) {
+      console.error('Failed to update list title', error);
+      if (Platform.OS === 'web') {
+        alert('エラー: リスト名の更新に失敗しました。');
+      } else {
+        Alert.alert('エラー', 'リスト名の更新に失敗しました。');
       }
     }
   };
@@ -342,14 +363,22 @@ export default function BoardDetailScreen() {
                   <Text style={styles.clearDueDateButtonText}>期限日をクリア</Text>
                 </TouchableOpacity>
               )}
-              {isDatePickerVisible && (
-                <DateTimePicker
-                  value={editedDueDate || new Date()}
-                  mode={datePickerMode}
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={onDateChange}
-                />
-              )}
+              {isDatePickerVisible &&
+                (Platform.OS === 'web' ? (
+                  <SimpleWebDatePicker
+                    value={editedDueDate}
+                    onChange={setEditedDueDate}
+                    onClose={() => setDatePickerVisible(false)}
+                  />
+                ) : (
+                  <DateTimePicker
+                    value={editedDueDate || new Date()}
+                    mode={datePickerMode}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onDateChange}
+                  />
+                ))}
+
               <TouchableOpacity style={styles.modalButton} onPress={handleUpdateCard}>
                 <Text style={styles.modalButtonText}>保存</Text>
               </TouchableOpacity>
@@ -385,6 +414,7 @@ export default function BoardDetailScreen() {
             handleAddCard={handleAddCard}
             handleToggleCardComplete={handleToggleCardComplete}
             handleDeleteCard={handleDeleteCard}
+            handleUpdateListTitle={handleUpdateListTitle}
           />
 
         </Animated.View>

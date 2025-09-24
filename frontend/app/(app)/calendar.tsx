@@ -1,148 +1,101 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  Modal,
-  FlatList,
   StyleSheet,
   Dimensions,
   StatusBar,
-  Alert
+  Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Board, Task } from '@/types';
+import apiClient from '@/api/client';
+import { HeaderSettingsButton } from '@/components/common/HeaderSettingsButton';
+import { BoardRow } from '@/components/gantt/BoardRow';
+import { TaskDetailModal } from '@/components/gantt/TaskDetailModal';
+import { BoardFilterModal } from '@/components/gantt/BoardFilterModal';
+import { SettingsModal } from '@/components/common/SettingsModal';
+import { AuthContext } from '@/contexts/AuthContext';
+
 
 const { width, height } = Dimensions.get('window');
-const DAY_WIDTH = 80;
-const TASK_HEIGHT = 50;
-const BOARD_HEADER_HEIGHT = 60;
-
-interface Task {
-  id: number;
-  title: string;
-  startDate: Date;
-  endDate: Date;
-  progress: number;
-  assignee: string;
-  completed: boolean;
-}
-
-interface Board {
-  id: number;
-  name: string;
-  color: string;
-  collapsed: boolean;
-  tasks: Task[];
-}
 
 const TrelloGanttChart = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showBoardModal, setShowBoardModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [boards, setBoards] = useState<Board[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  const router = useRouter();
+  const { token } = useContext(AuthContext);
 
-  const [boards, setBoards] = useState<Board[]>([
-    {
-      id: 1,
-      name: 'プロジェクトA',
-      color: '#FF6B6B',
-      collapsed: false,
-      tasks: [
-        {
-          id: 1,
-          title: '要件定義',
-          startDate: new Date(2025, 8, 23),
-          endDate: new Date(2025, 8, 27),
-          progress: 100,
-          assignee: '田中',
-          completed: true
-        },
-        {
-          id: 2,
-          title: 'デザイン作成',
-          startDate: new Date(2025, 8, 26),
-          endDate: new Date(2025, 9, 2),
-          progress: 75,
-          assignee: '佐藤',
-          completed: false
-        },
-        {
-          id: 3,
-          title: 'プロトタイプ開発',
-          startDate: new Date(2025, 8, 30),
-          endDate: new Date(2025, 9, 8),
-          progress: 30,
-          assignee: '鈴木',
-          completed: false
-        }
-      ]
-    },
-    {
-      id: 2,
-      name: 'プロジェクトB',
-      color: '#4ECDC4',
-      collapsed: false,
-      tasks: [
-        {
-          id: 4,
-          title: 'データ分析',
-          startDate: new Date(2025, 8, 24),
-          endDate: new Date(2025, 8, 28),
-          progress: 90,
-          assignee: '田中',
-          completed: false
-        },
-        {
-          id: 5,
-          title: 'レポート作成',
-          startDate: new Date(2025, 8, 28),
-          endDate: new Date(2025, 9, 5),
-          progress: 45,
-          assignee: '山田',
-          completed: false
-        }
-      ]
-    },
-    {
-      id: 3,
-      name: '開発チーム',
-      color: '#96CEB4',
-      collapsed: false,
-      tasks: [
-        {
-          id: 6,
-          title: 'バックエンド開発',
-          startDate: new Date(2025, 9, 1),
-          endDate: new Date(2025, 9, 15),
-          progress: 20,
-          assignee: '伊藤',
-          completed: false
-        },
-        {
-          id: 7,
-          title: 'フロントエンド開発',
-          startDate: new Date(2025, 9, 3),
-          endDate: new Date(2025, 9, 12),
-          progress: 10,
-          assignee: '高橋',
-          completed: false
-        },
-        {
-          id: 8,
-          title: 'テスト実装',
-          startDate: new Date(2025, 9, 10),
-          endDate: new Date(2025, 9, 20),
-          progress: 0,
-          assignee: '渡辺',
-          completed: false
-        }
-      ]
-    }
-  ]);
+  // Responsive DAY_WIDTH calculation
+  const isMobile = width <= 768;
+  const DAY_WIDTH = isMobile 
+    ? 80 // On mobile, use a fixed width for better readability and allow scrolling
+    : (viewMode === 'week' ? (width - 200) / 7 : (width - 200) / 15); // On desktop, fit to screen
+
+  useEffect(() => {
+    const fetchBoards = async () => {
+      if (!token) {
+        setLoading(false);
+        return; // Do not fetch if no token
+      }
+      try {
+        setLoading(true);
+        const response = await apiClient.get('/api/boards/');
+        const data = response.data as any[]; // Replace 'any' with a proper backend schema type if available
+
+        const transformedBoards: Board[] = data.map(board => {
+          const tasks: Task[] = board.lists.flatMap((list: any) => 
+            list.cards.map((card: any) => {
+              const endDate = card.due_date ? new Date(card.due_date) : null;
+              const startDate = card.start_date ? new Date(card.start_date) : endDate; // Use start_date from API, fallback to endDate
+              
+              return {
+                id: card.id,
+                title: card.title,
+                startDate: startDate,
+                endDate: endDate,
+                progress: card.completed ? 100 : 0, // Placeholder for progress
+                assignee: '', // Placeholder for assignee
+                completed: card.completed,
+              };
+            })
+          );
+
+          return {
+            id: board.id,
+            name: board.title,
+            color: board.color || '#8E44AD', // Use color from API, fallback to a default
+            collapsed: false,
+            tasks: tasks,
+          };
+        });
+
+        setBoards(transformedBoards);
+      } catch (err) {
+        Alert.alert('エラー', 'ボードデータの取得に失敗しました。');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBoards();
+  }, [token]);
+
+  if (loading) {
+    return <View style={styles.container}><Text>読み込み中...</Text></View>;
+  }
 
   const getDateRange = (): Date[] => {
     const start = new Date(currentDate);
@@ -179,10 +132,10 @@ const TrelloGanttChart = () => {
 
   const calculateTaskPosition = (task: Task, dateRange: Date[]): { left: number; width: number } | null => {
     const startIndex = dateRange.findIndex(date => 
-      date.toDateString() === task.startDate.toDateString()
+      task.startDate && date.toDateString() === task.startDate.toDateString()
     );
     const endIndex = dateRange.findIndex(date => 
-      date.toDateString() === task.endDate.toDateString()
+      task.endDate && date.toDateString() === task.endDate.toDateString()
     );
 
     if (startIndex === -1 && endIndex === -1) return null;
@@ -215,6 +168,39 @@ const TrelloGanttChart = () => {
     })));
   };
 
+  const updateTaskDueDate = async (taskId: number, newDueDate: Date | null) => {
+    try {
+      const response = await apiClient.put(`/api/cards/${taskId}`, { 
+        due_date: newDueDate ? newDueDate.toISOString() : null
+      });
+      const updatedCard = response.data;
+
+      // Update the boards state
+      const newBoards = boards.map(board => ({
+        ...board,
+        tasks: board.tasks.map(task => {
+          if (task.id === taskId) {
+            const updatedTask = {
+              ...task,
+              endDate: updatedCard.due_date ? new Date(updatedCard.due_date) : null,
+            };
+            // Also update the selected task if it's the one being edited
+            if (selectedTask && selectedTask.id === taskId) {
+              setSelectedTask(updatedTask);
+            }
+            return updatedTask;
+          }
+          return task;
+        }),
+      }));
+      setBoards(newBoards);
+
+    } catch (error) {
+      console.error('Failed to update due date', error);
+      Alert.alert('エラー', '期限日の更新に失敗しました。');
+    }
+  };
+
   const navigateTime = (direction: number) => {
     const newDate = new Date(currentDate);
     const days = viewMode === 'week' ? 7 : 30;
@@ -232,12 +218,12 @@ const TrelloGanttChart = () => {
           horizontal 
           showsHorizontalScrollIndicator={false}
           ref={scrollViewRef}
-          contentOffset={{ x: (dateRange.length * DAY_WIDTH / 2) - (width / 2), y: 0 }}
+          contentOffset={isMobile ? { x: 0, y: 0 } : { x: (dateRange.length * DAY_WIDTH / 2) - ((width - 200) / 2), y: 0 }}
         >
           <View style={styles.dateHeader}>
             {dateRange.map((date, index) => (
               <View key={index} style={[
-                styles.dateColumn,
+                styles.dateColumn, { width: DAY_WIDTH },
                 isWeekend(date) && styles.weekendColumn,
                 isToday(date) && styles.todayColumn
               ]}>
@@ -258,172 +244,6 @@ const TrelloGanttChart = () => {
             ))}
           </View>
         </ScrollView>
-      </View>
-    );
-  };
-
-  const renderTaskBar = (task: Task, boardColor: string, dateRange: Date[]) => {
-    const position = calculateTaskPosition(task, dateRange);
-    if (!position) return null;
-
-    const progressWidth = (position.width * task.progress) / 100;
-    
-    return (
-      <TouchableOpacity
-        key={task.id}
-        style={[
-          styles.taskBar,
-          { 
-            left: position.left,
-            width: position.width,
-            backgroundColor: `${boardColor}40`,
-            borderColor: boardColor
-          },
-          task.completed && styles.taskBarCompleted
-        ]}
-        onPress={() => {
-          setSelectedTask(task);
-          setShowTaskModal(true);
-        }}
-        activeOpacity={0.8}
-      >
-        <View 
-          style={[
-            styles.taskProgress,
-            { 
-              width: progressWidth,
-              backgroundColor: boardColor
-            }
-          ]}
-        />
-        <Text style={[
-          styles.taskBarText,
-          task.completed && styles.taskBarTextCompleted
-        ]} numberOfLines={1}>
-          {task.title}
-        </Text>
-        <View style={styles.taskInfo}>
-          <Text style={styles.taskProgressText}>{task.progress}%</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderBoard = (board: Board) => {
-    const dateRange = getDateRange();
-    const visibleTasks = selectedBoard === 'all' || selectedBoard === board.name 
-      ? board.tasks 
-      : [];
-
-    return (
-      <View key={board.id} style={styles.boardContainer}>
-        {/* Board Header */}
-        <TouchableOpacity
-          style={[styles.boardHeader, { borderLeftColor: board.color }]}
-          onPress={() => toggleBoardCollapse(board.id)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.boardHeaderContent}>
-            <View style={styles.boardInfo}>
-              <Text style={styles.boardName}>{board.name}</Text>
-              <Text style={styles.taskCount}>{board.tasks.length}タスク</Text>
-            </View>
-            <View style={styles.boardControls}>
-              <Text style={[
-                styles.collapseIcon,
-                board.collapsed && styles.collapseIconRotated
-              ]}>
-                ▼
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* Tasks */}
-        {!board.collapsed && (
-          <View style={styles.tasksContainer}>
-            <View style={styles.taskNameColumn}>
-              {visibleTasks.map(task => (
-                <View key={task.id} style={styles.taskNameContainer}>
-                  <Text style={[
-                    styles.taskName,
-                    task.completed && styles.taskNameCompleted
-                  ]} numberOfLines={2}>
-                    {task.title}
-                  </Text>
-                  <Text style={styles.taskAssignee}>{task.assignee}</Text>
-                </View>
-              ))}
-            </View>
-            
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentOffset={{ x: (dateRange.length * DAY_WIDTH / 2) - (width / 2), y: 0 }}
-            >
-              <View style={styles.ganttArea}>
-                {/* Date Grid Lines */}
-                {dateRange.map((date, index) => (
-                  <View 
-                    key={index}
-                    style={[
-                      styles.dateGridLine,
-                      isWeekend(date) && styles.weekendGridLine,
-                      isToday(date) && styles.todayGridLine
-                    ]}
-                  />
-                ))}
-                
-                {/* Task Bars */}
-                {visibleTasks.map(task => 
-                  renderTaskBar(task, board.color, dateRange)
-                )}
-              </View>
-            </ScrollView>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const renderProgressSlider = (task: Task) => {
-    const [tempProgress, setTempProgress] = useState(task.progress);
-
-    return (
-      <View style={styles.progressContainer}>
-        <Text style={styles.progressLabel}>進捗: {tempProgress}%</Text>
-        <View style={styles.sliderContainer}>
-          <View style={styles.sliderTrack}>
-            <View 
-              style={[
-                styles.sliderFill,
-                { width: `${tempProgress}%` }
-              ]}
-            />
-          </View>
-          <View style={styles.progressButtons}>
-            {[0, 25, 50, 75, 100].map(value => (
-              <TouchableOpacity
-                key={value}
-                style={[
-                  styles.progressButton,
-                  tempProgress === value && styles.progressButtonActive
-                ]}
-                onPress={() => {
-                  setTempProgress(value);
-                  updateTaskProgress(task.id, value);
-                }}
-              >
-                <Text style={[
-                  styles.progressButtonText,
-                  tempProgress === value && styles.progressButtonTextActive
-                ]}>
-                  {value}%
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
       </View>
     );
   };
@@ -454,12 +274,7 @@ const TrelloGanttChart = () => {
               viewMode === 'month' && styles.viewModeButtonTextActive
             ]}>月</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setShowBoardModal(true)}
-          >
-            <Text style={styles.filterIcon}>⚙</Text>
-          </TouchableOpacity>
+          <HeaderSettingsButton onPress={() => setShowSettingsModal(true)} />
         </View>
       </View>
 
@@ -489,128 +304,53 @@ const TrelloGanttChart = () => {
 
       {/* Gantt Chart */}
       <ScrollView style={styles.ganttContainer} showsVerticalScrollIndicator={false}>
-        {boards.map(board => renderBoard(board))}
+        {boards.map(board => (
+          <BoardRow 
+            key={board.id}
+            board={board}
+            dateRange={getDateRange()}
+            DAY_WIDTH={DAY_WIDTH}
+            isMobile={isMobile}
+            selectedBoard={selectedBoard}
+            toggleBoardCollapse={toggleBoardCollapse}
+            onTaskPress={(task) => {
+              setSelectedTask(task);
+              setShowTaskModal(true);
+            }}
+          />
+        ))}
       </ScrollView>
 
-      {/* Task Detail Modal */}
-      <Modal
+      <TaskDetailModal 
         visible={showTaskModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowTaskModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {selectedTask?.title}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowTaskModal(false)}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
-            
-            {selectedTask && (
-              <ScrollView style={styles.taskDetails}>
-                <View style={styles.taskDetailRow}>
-                  <Text style={styles.taskDetailLabel}>担当者</Text>
-                  <Text style={styles.taskDetailValue}>{selectedTask.assignee}</Text>
-                </View>
-                
-                <View style={styles.taskDetailRow}>
-                  <Text style={styles.taskDetailLabel}>開始日</Text>
-                  <Text style={styles.taskDetailValue}>
-                    {selectedTask.startDate.toLocaleDateString('ja-JP')}
-                  </Text>
-                </View>
-                
-                <View style={styles.taskDetailRow}>
-                  <Text style={styles.taskDetailLabel}>終了日</Text>
-                  <Text style={styles.taskDetailValue}>
-                    {selectedTask.endDate.toLocaleDateString('ja-JP')}
-                  </Text>
-                </View>
-                
-                <View style={styles.taskDetailRow}>
-                  <Text style={styles.taskDetailLabel}>ステータス</Text>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: selectedTask.completed ? '#27AE60' : '#F39C12' }
-                  ]}>
-                    <Text style={styles.statusText}>
-                      {selectedTask.completed ? '完了' : '進行中'}
-                    </Text>
-                  </View>
-                </View>
+        onClose={() => setShowTaskModal(false)}
+        task={selectedTask}
+        updateTaskProgress={updateTaskProgress}
+        updateTaskDueDate={updateTaskDueDate}
+      />
 
-                {renderProgressSlider(selectedTask)}
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Board Filter Modal */}
-      <Modal
+      <BoardFilterModal
         visible={showBoardModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowBoardModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.filterModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>ボード選択</Text>
-              <TouchableOpacity
-                onPress={() => setShowBoardModal(false)}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
+        onClose={() => setShowBoardModal(false)}
+        boards={boards}
+        selectedBoard={selectedBoard}
+        onSelectBoard={(boardName) => {
+          setSelectedBoard(boardName);
+          setShowBoardModal(false);
+        }}
+      />
 
-            <TouchableOpacity
-              style={styles.filterOption}
-              onPress={() => {
-                setSelectedBoard('all');
-                setShowBoardModal(false);
-              }}
-            >
-              <View style={[styles.radio, selectedBoard === 'all' && styles.radioSelected]}>
-                {selectedBoard === 'all' && <View style={styles.radioDot} />}
-              </View>
-              <Text style={styles.filterOptionText}>すべてのボード</Text>
-            </TouchableOpacity>
-
-            {boards.map(board => (
-              <TouchableOpacity
-                key={board.id}
-                style={styles.filterOption}
-                onPress={() => {
-                  setSelectedBoard(board.name);
-                  setShowBoardModal(false);
-                }}
-              >
-                <View style={[styles.radio, selectedBoard === board.name && styles.radioSelected]}>
-                  {selectedBoard === board.name && <View style={styles.radioDot} />}
-                </View>
-                <View style={styles.boardOption}>
-                  <View style={[styles.boardColorIndicator, { backgroundColor: board.color }]} />
-                  <Text style={styles.filterOptionText}>{board.name}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </Modal>
+      <SettingsModal visible={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
+        
     </SafeAreaView>
   );
 };
 
 export default TrelloGanttChart;
+
+// Define constants for heights used in styles
+const BOARD_HEADER_HEIGHT = 48;
+const TASK_HEIGHT = 40;
 
 const styles = StyleSheet.create({
   container: {
@@ -708,7 +448,6 @@ const styles = StyleSheet.create({
     height: 60,
   },
   dateColumn: {
-    width: DAY_WIDTH,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
@@ -718,7 +457,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FDF2F2',
   },
   todayColumn: {
-    backgroundColor: '#E3F2FD',
+    borderRightColor: '#64ffda',
+    borderRightWidth: 2,
   },
   dateText: {
     fontSize: 14,
@@ -733,14 +473,8 @@ const styles = StyleSheet.create({
   weekendText: {
     color: '#E74C3C',
   },
-  todayDateText: {
-    color: '#2196F3',
-    fontWeight: 'bold',
-  },
-  todayDayText: {
-    color: '#2196F3',
-    fontWeight: 'bold',
-  },
+  todayDateText: {},
+  todayDayText: {},
   ganttContainer: {
     flex: 1,
   },
@@ -818,10 +552,8 @@ const styles = StyleSheet.create({
   ganttArea: {
     flexDirection: 'row',
     position: 'relative',
-    minWidth: 800,
   },
   dateGridLine: {
-    width: DAY_WIDTH,
     borderRightWidth: 1,
     borderRightColor: '#ECF0F1',
     backgroundColor: 'white',
@@ -1048,3 +780,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
 });
+function setLoading(arg0: boolean) {
+  throw new Error('Function not implemented.');
+}
+

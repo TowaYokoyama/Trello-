@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../api/client';
+import apiClient from '@/api/client';
 import { AxiosError } from 'axios';
 import { useRouter } from 'expo-router'; // useRouterをインポート
 
@@ -30,7 +30,7 @@ interface AuthProviderProps {
 // --- Contextの作成 ---
 
 // デフォルト値は空。実際の値はProviderから提供される。
-const AuthContext = createContext<AuthContextData>({} as AuthContextData);
+export const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
 // --- Providerコンポーネント ---
 

@@ -30,6 +30,7 @@ class Board(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
     description = Column(String, index=True, nullable=True)
+    color = Column(String, nullable=True)
 
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="boards")
@@ -62,6 +63,7 @@ class Card(Base):
     title = Column(String, index=True)
     description = Column(String, index=True, nullable=True)
     completed = Column(Boolean, default=False)
+    start_date = Column(DateTime, nullable=True, index=True)
     due_date = Column(DateTime, nullable=True, index=True)
 
     list_id = Column(Integer, ForeignKey("lists.id"))

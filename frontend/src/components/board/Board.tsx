@@ -26,6 +26,7 @@ interface BoardProps {
   handleAddCard: (listId: number, cardTitle: string) => void;
   handleToggleCardComplete: (listId: number, card: Card) => void;
   handleDeleteCard: (listId: number, cardId: number) => void;
+  handleUpdateListTitle: (listId: number, newTitle: string) => void;
 }
 
 interface CardItemProps {
@@ -104,13 +105,49 @@ export default function Board({
   handleAddCard, 
   handleToggleCardComplete,
   handleDeleteCard,
+  handleUpdateListTitle,
 }: BoardProps) {
+  const [editingListId, setEditingListId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+
+  const startEditing = (list: List) => {
+    setEditingListId(list.id);
+    setEditingTitle(list.title);
+  };
+
+  const finishEditing = () => {
+    if (editingListId && editingTitle.trim()) {
+      handleUpdateListTitle(editingListId, editingTitle);
+    }
+    setEditingListId(null);
+    setEditingTitle('');
+  };
 
   const renderList = ({ item: list, index }: { item: List, index: number }) => {
+    const isEditing = editingListId === list.id;
+
     return (
       <View style={styles.listCard}>
         <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>{getListEmoji(index)} {list.title}</Text>
+          {isEditing ? (
+            <TextInput
+              style={styles.listTitleInput}
+              value={editingTitle}
+              onChangeText={setEditingTitle}
+              onBlur={finishEditing}
+              onSubmitEditing={finishEditing}
+              autoFocus
+            />
+          ) : (
+            <>
+              <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
+                {getListEmoji(index)} {list.title}
+              </Text>
+              <TouchableOpacity onPress={() => startEditing(list)} style={styles.editListButton}>
+                <Text style={styles.editListButtonText}>🖊️</Text>
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity onPress={() => handleDeleteList(list.id)} style={styles.deleteListButton}><Text style={styles.deleteListButtonText}>🗑️</Text></TouchableOpacity>
         </View>
         
@@ -119,8 +156,8 @@ export default function Board({
             <CardItem 
               key={card.id} 
               card={card} 
-              onCardPress={onCardPress} 
-              listId={list.id} 
+              onCardPress={onCardPress}
+              listId={list.id}
               onToggle={() => handleToggleCardComplete(list.id, card)}
               onDelete={() => handleDeleteCard(list.id, card.id)}
             />
@@ -148,8 +185,16 @@ const styles = StyleSheet.create({
   listCard: { width: 320, backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 25, padding: 20, marginRight: 15, height: height * 0.65 },
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   listTitle: { fontSize: 22, fontWeight: 'bold', color: '#64ffda', flex: 1 },
+  listTitleInput: { fontSize: 22, fontWeight: 'bold', color: '#64ffda', flex: 1, borderBottomWidth: 1, borderColor: '#64ffda', paddingBottom: 5 },
   deleteListButton: { padding: 8, borderRadius: 15, backgroundColor: 'rgba(255, 82, 82, 0.2)' },
   deleteListButtonText: { fontSize: 18 },
+  editListButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  editListButtonText: {
+    fontSize: 18,
+  },
   cardsContainer: { flex: 1, marginBottom: 20 },
   cardItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
