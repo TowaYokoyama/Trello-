@@ -194,7 +194,7 @@ export default function BoardsScreen() {
   const renderListHeader = () => (
     <View style={styles.headerAndFormContainer}>
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>📋 マイボード</Text>
+        <Text style={styles.headerTitle}>📋 一覧</Text>
         <Text style={styles.headerSubtitle}>プロジェクトを整理して効率的に作業しましょう</Text>
         <TouchableOpacity onPress={logout} style={styles.logoutButton}>
           <Text style={styles.logoutButtonText}>Logout</Text>

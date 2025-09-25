@@ -20,15 +20,22 @@ import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 import BoardComponent from '../../../src/components/board/Board';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import SimpleWebDatePicker from '@/components/common/SimpleWebDatePicker.web';
+import { User } from '@/types';
 
 
 
 // --- Type Definitions ---
+interface Member {
+  id: number;
+  email: string;
+}
+
 interface BoardType {
   id: number;
   title: string;
   description: string | null;
   owner_id: number;
+  members: Member[];
 }
 
 interface List {
@@ -89,6 +96,10 @@ export default function BoardDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
+
+  // Member invite modal state
+  const [isInviteModalVisible, setInviteModalVisible] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
 
   // For card editing modal
   const [isEditModalVisible, setEditModalVisible] = useState(false);
@@ -228,6 +239,23 @@ export default function BoardDetailScreen() {
     }
   };
 
+  const handleInviteMember = async () => {
+    if (!inviteEmail.trim() || !boardId) return;
+    try {
+      const response = await apiClient.post(`/api/boards/${boardId}/members`, { email: inviteEmail });
+      setBoard(response.data);
+      setInviteModalVisible(false);
+      setInviteEmail('');
+    } catch (error) {
+      console.error('Failed to invite member', error);
+      if (Platform.OS === 'web') {
+        alert('招待エラー: メンバーの招待に失敗しました。メールアドレスを確認してください。');
+      } else {
+        Alert.alert('招待エラー', 'メンバーの招待に失敗しました。メールアドレスを確認してください。');
+      }
+    }
+  };
+
   const handleToggleCardComplete = async (listId: number, card: Card) => {
     try {
       const updatedCard = { ...card, completed: !card.completed };
@@ -329,6 +357,34 @@ export default function BoardDetailScreen() {
   return (
     <LinearGradient colors={['#1a1a2e', '#16213e', '#0f3460']} style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+
+      {/* Invite Member Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isInviteModalVisible}
+        onRequestClose={() => setInviteModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>メンバーを招待</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="招待するユーザーのメールアドレス"
+              value={inviteEmail}
+              onChangeText={setInviteEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TouchableOpacity style={styles.modalButton} onPress={handleInviteMember}>
+              <Text style={styles.modalButtonText}>招待する</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalButton, styles.modalCancelButton]} onPress={() => setInviteModalVisible(false)}>
+              <Text style={styles.modalButtonText}>キャンセル</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       
       {selectedCard && (
         <Modal
@@ -393,7 +449,24 @@ export default function BoardDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Animated.View style={[{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.push('/(app)')} style={styles.backButton}>
+              <Text style={styles.backButtonText}>🔙 </Text>
+            </TouchableOpacity>
             <Text style={styles.boardTitle}>{board?.title}</Text>
+
+            {/* Members display */}
+            <View style={styles.membersContainer}>
+              {(board?.members || []).map(member => (
+                <View key={member.id} style={styles.memberAvatar}>
+                  <Text style={styles.memberAvatarText}>{member.email.charAt(0).toUpperCase()}</Text>
+                </View>
+              ))}
+            </View>
+
+            <TouchableOpacity onPress={() => setInviteModalVisible(true)} style={styles.inviteButton}>
+              <Text style={styles.inviteButtonText}>+</Text>
+            </TouchableOpacity>
+
             {board?.description && <Text style={styles.boardDescription}>{board.description}</Text>}
           </View>
 
@@ -434,7 +507,18 @@ const styles = StyleSheet.create({
   scrollContainer: { paddingTop: 60, paddingHorizontal: 20 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#64ffda', fontSize: 18, marginTop: 20, fontWeight: '600' },
-  header: { alignItems: 'center', marginBottom: 30 },
+  header: { alignItems: 'center', marginBottom: 30, position: 'relative' },
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    top: 10, // Adjust as needed
+    padding: 10,
+    zIndex: 1,
+  },
+  backButtonText: {
+    color: '#64ffda',
+    fontSize: 16,
+  },
   calendarButton: {
     backgroundColor: 'rgba(100, 255, 218, 0.15)',
     borderRadius: 15,
@@ -462,6 +546,46 @@ const styles = StyleSheet.create({
     })
   },
   boardDescription: { fontSize: 18, color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', lineHeight: 26, paddingHorizontal: 20 },
+  membersContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 15,
+    marginBottom: 15,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  memberAvatarText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  inviteButton: {
+    position: 'absolute',
+    right: 15,
+    top: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(100, 255, 218, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+    borderWidth: 1,
+    borderColor: '#64ffda',
+  },
+  inviteButtonText: {
+    color: '#64ffda',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
   addListContainer: { marginBottom: 30, alignItems: 'center' },
   addListInputContainer: {
     flexDirection: 'row',

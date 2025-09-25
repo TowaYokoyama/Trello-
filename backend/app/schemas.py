@@ -93,56 +93,49 @@ class BoardBase(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
 
-
 class BoardCreate(BoardBase):
-    """
-    ボード作成時にAPIが受け取るデータのためのスキーマ。
-    """
     pass
-
 
 class BoardUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     color: Optional[str] = None
 
-
-class Board(BoardBase):
-    """
-    APIがレスポンスとして返すボード情報のためのスキーマ。
-    """
+class BoardForUser(BoardBase):
     id: int
-    owner_id: int  # どのユーザーに属するかを示すID
+    owner_id: int
     color: Optional[str] = None
-    lists: List[ListSchema] = []  # このボードが持つリストのリスト
-
+    class Config:
+        from_attributes = True
 
 # --- User Schemas ---
 
 class UserBase(BaseModel):
-    """
-    ユーザー情報の基本的なスキーマ。
-    """
     email: str
 
-
 class UserCreate(UserBase):
-    """
-    ユーザー作成時にAPIリクエストのボディとして受け取るデータのためのスキーマ。
-    """
     password: str
 
+class UserForBoard(UserBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# --- Main Schemas with relationships ---
+
+class Board(BoardBase):
+    id: int
+    owner_id: int
+    color: Optional[str] = None
+    lists: List["ListSchema"] = []
+    members: List[UserForBoard] = []
+
+    class Config:
+        from_attributes = True
 
 class User(UserBase):
-    """
-    APIレスポンスとして返すユーザー情報のためのスキーマ。
-    """
     id: int
-    # このユーザーが所有するボードのリスト。
-    # レスポンスモデルとしてUserスキーマを指定すると、FastAPIは自動的に
-    # user.boards (models.pyで定義したrelationship) からデータを取得し、
-    # この'boards'フィールドにBoardスキーマのリストとして設定してくれます。
-    boards: List[Board] = []
+    boards: List[BoardForUser] = []
     push_tokens: List['PushToken'] = []
 
     class Config:

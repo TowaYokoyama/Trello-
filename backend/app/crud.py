@@ -94,6 +94,30 @@ def delete_board(db: Session, *, db_board: models.Board) -> models.Board:
     return db_board
 
 
+def add_member_to_board(db: Session, *, board: models.Board, user: models.User) -> models.Board:
+    """
+    ボードにメンバーを追加します。
+    """
+    if user not in board.members:
+        board.members.append(user)
+        db.add(board)
+        db.commit()
+        db.refresh(board)
+    return board
+
+
+def remove_member_from_board(db: Session, *, board: models.Board, user: models.User) -> models.Board:
+    """
+    ボードからメンバーを削除します。
+    """
+    if user in board.members:
+        board.members.remove(user)
+        db.add(board)
+        db.commit()
+        db.refresh(board)
+    return board
+
+
 # --- List CRUD ---
 
 def get_list(db: Session, list_id: int):

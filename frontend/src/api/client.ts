@@ -1,9 +1,20 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
+// 開発用PCのIPアドレスを設定
+// このIPアドレスは、バックエンドサーバーが動作しているPCのローカルIPアドレスに置き換えてください。
+// Windowsでは `ipconfig`、macOSでは `ifconfig` コマンドで確認できます。
+const DEV_SERVER_IP = '192.168.0.11';
+
+// プラットフォームに応じてbaseURLを決定
+const baseURL = Platform.OS === 'web'
+  ? 'http://localhost:8088' // Webの場合はlocalhost
+  : `http://${DEV_SERVER_IP}:8088`; // ネイティブの場合はIPアドレス
 
 // バックエンドサーバーのベースURL
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8088',
+  baseURL: baseURL,
 });
 
 // リクエストインターセプターの設定

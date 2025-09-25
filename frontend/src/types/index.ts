@@ -15,3 +15,9 @@ export interface Board {
   collapsed: boolean;
   tasks: Task[];
 }
+
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+}

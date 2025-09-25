@@ -17,9 +17,7 @@ app = FastAPI()
 router = APIRouter(prefix="/api")
 
 # CORSミドルウェアを有効にする
-origins = [
-    "http://localhost:8081",  # Next.jsアプリケーションのオリジン
-]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -163,6 +161,40 @@ def delete_board(
     if db_board is None or db_board.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Board not found or not owned by user")
     return crud.delete_board(db=db, db_board=db_board)
+
+
+class MemberInviteRequest(BaseModel):
+    email: str
+
+@router.post("/boards/{board_id}/members", response_model=schemas.Board)
+def add_board_member(
+    board_id: int,
+    invite: MemberInviteRequest,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user),
+):
+    db_board = crud.get_board(db, board_id=board_id)
+
+    # --- DEBUG LOGGING START ---
+    if db_board:
+        print(f"DEBUG: Attempting to add member to board {board_id}")
+        print(f"DEBUG: Board Owner ID: {db_board.owner_id}, Current User ID: {current_user.id}")
+    else:
+        print(f"DEBUG: Board with ID {board_id} not found.")
+    # --- DEBUG LOGGING END ---
+
+    # オーナーチェック
+    if db_board is None or db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Board not found or you are not the owner")
+    
+    # 招待されるユーザーを検索
+    user_to_add = crud.get_user_by_email(db, email=invite.email)
+    if user_to_add is None:
+        raise HTTPException(status_code=404, detail="User to invite not found")
+
+    # crud を呼び出し
+    updated_board = crud.add_member_to_board(db=db, board=db_board, user=user_to_add)
+    return updated_board
 
 
 # --- List エンドポイント ---

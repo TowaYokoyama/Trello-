@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Board, Task } from '@/types';
 
@@ -246,11 +247,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
+      },
+      native: {
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+      }
+    })
   },
   taskBarCompleted: {
     opacity: 0.7,

@@ -1,10 +1,18 @@
 # backend/app/models.py
 
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Table
 from sqlalchemy.orm import relationship
 
 # database.pyで作成したBaseクラスをインポートします。
 from .database import Base
+
+# ボードとユーザーの多対多関係を定義する中間テーブル
+board_members = Table(
+    "board_members",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
+    Column("board_id", Integer, ForeignKey("boards.id"), primary_key=True),
+)
 
 
 class User(Base):
@@ -18,6 +26,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
 
     boards = relationship("Board", back_populates="owner")
+    member_boards = relationship("Board", secondary=board_members, back_populates="members")
     push_tokens = relationship("PushToken", back_populates="user")
 
 
@@ -34,6 +43,7 @@ class Board(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="boards")
+    members = relationship("User", secondary=board_members, back_populates="member_boards")
 
     lists = relationship("List", back_populates="board")
 
