@@ -1,6 +1,7 @@
 # backend/app/crud.py
 
 from fastapi import HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import Any, Dict, Union, List
 import random
@@ -45,13 +46,18 @@ def get_board(db: Session, board_id: int):
     return db.query(models.Board).filter(models.Board.id == board_id).first()
 
 
-def get_boards_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[models.Board]:
+def get_boards_for_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[models.Board]:
     """
-    特定のユーザーが所有するボードをデータベースから取得します（ページネーション対応）。
+    ユーザーが所有している、またはメンバーとして参加しているボードの一覧を取得します。
     """
     return (
         db.query(models.Board)
-        .filter(models.Board.owner_id == user_id)
+        .filter(
+            or_(
+                models.Board.owner_id == user_id,
+                models.Board.members.any(models.User.id == user_id)
+            )
+        )
         .offset(skip)
         .limit(limit)
         .all()

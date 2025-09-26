@@ -123,7 +123,10 @@ def read_boards_for_current_user(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    return crud.get_boards_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
+    """
+    現在ログインしているユーザーがアクセス可能なボード（所有またはメンバー）の一覧を取得します。
+    """
+    return crud.get_boards_for_user(db, user_id=current_user.id, skip=skip, limit=limit)
 
 
 @router.get("/boards/{board_id}", response_model=schemas.Board)
@@ -132,9 +135,23 @@ def read_board(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたIDのボード情報を取得します。
+    ユーザーがそのボードの所有者またはメンバーでない場合は、アクセスを拒否します。
+    """
     db_board = crud.get_board(db, board_id=board_id)
-    if db_board is None or db_board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+    
+    # ボードが存在しない場合のチェック
+    if db_board is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+
+    # ユーザーが所有者でもなく、メンバーでもない場合のアクセス拒否チェック
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+    
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to access this board")
+        
     return db_board
 
 
@@ -209,9 +226,22 @@ def create_list_for_board(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたボードに新しいリストを作成します。
+    ユーザーがそのボードの所有者またはメンバーでない場合は、操作を拒否します。
+    """
     db_board = crud.get_board(db, board_id=board_id)
-    if db_board is None or db_board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+
+    # ボードの存在とアクセス権限をチェック
+    if db_board is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+    
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to create a list on this board")
+
     return crud.create_board_list(db=db, list_item=list_item, board_id=board_id)
 
 
@@ -223,9 +253,22 @@ def read_lists_for_board(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたボードに属するリストの一覧を取得します。
+    ユーザーがそのボードの所有者またはメンバーでない場合は、アクセスを拒否します。
+    """
     db_board = crud.get_board(db, board_id=board_id)
-    if db_board is None or db_board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+
+    # ボードの存在とアクセス権限をチェック
+    if db_board is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+    
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to access this board")
+
     lists = crud.get_lists_by_board(db, board_id=board_id, skip=skip, limit=limit)
     return lists
 
@@ -249,9 +292,21 @@ def update_list(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたリストの情報を更新します。
+    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
+    """
     db_list = crud.get_list(db, list_id=list_id)
-    if db_list is None or db_list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+    if db_list is None:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    db_board = db_list.board
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to update a list on this board")
+
     return crud.update_list(db=db, db_list=db_list, list_in=list_item)
 
 
@@ -261,9 +316,21 @@ def delete_list(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたリストを削除します。
+    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
+    """
     db_list = crud.get_list(db, list_id=list_id)
-    if db_list is None or db_list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+    if db_list is None:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    db_board = db_list.board
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to delete a list on this board")
+
     return crud.delete_list(db=db, db_list=db_list)
 
 
@@ -276,9 +343,24 @@ def create_card_for_list(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたリストに新しいカードを作成します。
+    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
+    """
     db_list = crud.get_list(db, list_id=list_id)
-    if db_list is None or db_list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+
+    # リストの存在をチェック
+    if db_list is None:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    # ボードへのアクセス権限をチェック
+    db_board = db_list.board
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to create a card on this board")
+
     return crud.create_list_card(db=db, card=card, list_id=list_id)
 
 
@@ -290,9 +372,24 @@ def read_cards_for_list(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたリストに属するカードの一覧を取得します。
+    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、アクセスを拒否します。
+    """
     db_list = crud.get_list(db, list_id=list_id)
-    if db_list is None or db_list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="List not found or not owned by user")
+
+    # リストの存在をチェック
+    if db_list is None:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    # ボードへのアクセス権限をチェック
+    db_board = db_list.board
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user in db_board.members
+
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to access this board")
+
     cards = crud.get_cards_by_list(db, list_id=list_id, skip=skip, limit=limit)
     return cards
 
@@ -316,9 +413,24 @@ def update_card(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたカードの情報を更新します。
+    ユーザーがそのカードが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
+    """
     db_card = crud.get_card(db, card_id=card_id)
-    if db_card is None or db_card.list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Card not found or not owned by user")
+
+    # カードの存在をチェック
+    if db_card is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # ボードへのアクセス権限をチェック
+    db_board = db_card.list.board
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to update a card on this board")
+
     return crud.update_card(db=db, db_card=db_card, card_in=card)
 
 
@@ -328,9 +440,21 @@ def delete_card(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    """
+    指定されたカードを削除します。
+    ユーザーがそのカードが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
+    """
     db_card = crud.get_card(db, card_id=card_id)
-    if db_card is None or db_card.list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Card not found or not owned by user")
+    if db_card is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    db_board = db_card.list.board
+    is_owner = db_board.owner_id == current_user.id
+    is_member = current_user.id in [member.id for member in db_board.members]
+
+    if not (is_owner or is_member):
+        raise HTTPException(status_code=403, detail="Not authorized to delete a card on this board")
+
     return crud.delete_card(db=db, db_card=db_card)
 
 
@@ -355,6 +479,23 @@ def read_all_users_for_debug(
     """
     users = crud.get_users(db)
     return users
+
+
+
+@router.get("/debug/users/{user_id}/boards", response_model=List[schemas.Board], include_in_schema=False)
+def debug_get_user_boards(user_id: int, db: Session = Depends(get_db)):
+    """
+    デバッグ用：指定されたユーザーIDがアクセス可能なボード一覧を返します。
+    （get_boards_for_userの動作確認用）
+    """
+    print(f"--- DEBUG: Fetching boards for user_id: {user_id} ---")
+    boards = crud.get_boards_for_user(db, user_id=user_id)
+    print(f"--- DEBUG: Found {len(boards)} boards for user_id: {user_id} ---")
+    for board in boards:
+        print(f"  - Board ID: {board.id}, Title: {board.title}, Owner ID: {board.owner_id}")
+        member_ids = [member.id for member in board.members]
+        print(f"    Members: {member_ids}")
+    return boards
 
 
 app.include_router(router)
