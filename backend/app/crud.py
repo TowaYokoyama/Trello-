@@ -1,5 +1,6 @@
 # backend/app/crud.py
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Any, Dict, Union, List
 import random
@@ -26,6 +27,13 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.commit()
     db.refresh(db_user)
     return db_user
+
+
+def get_users(db: Session, skip: int = 0, limit: int = 100) -> List[models.User]:
+    """
+    すべてのユーザーをデータベースから取得します。
+    """
+    return db.query(models.User).offset(skip).limit(limit).all()
 
 
 # --- Board CRUD ---
@@ -98,11 +106,15 @@ def add_member_to_board(db: Session, *, board: models.Board, user: models.User) 
     """
     ボードにメンバーを追加します。
     """
-    if user not in board.members:
-        board.members.append(user)
-        db.add(board)
-        db.commit()
-        db.refresh(board)
+    if user in board.members:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already a member of this board",
+        )
+    board.members.append(user)
+    db.add(board)
+    db.commit()
+    db.refresh(board)
     return board
 
 

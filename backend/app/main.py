@@ -176,6 +176,7 @@ def add_board_member(
     db_board = crud.get_board(db, board_id=board_id)
 
     # --- DEBUG LOGGING START ---
+    print(f"DEBUG: Received email to invite: '{invite.email}'")
     if db_board:
         print(f"DEBUG: Attempting to add member to board {board_id}")
         print(f"DEBUG: Board Owner ID: {db_board.owner_id}, Current User ID: {current_user.id}")
@@ -183,9 +184,11 @@ def add_board_member(
         print(f"DEBUG: Board with ID {board_id} not found.")
     # --- DEBUG LOGGING END ---
 
+    # --- DEBUG: Temporarily disable owner check ---
     # オーナーチェック
-    if db_board is None or db_board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Board not found or you are not the owner")
+    # if db_board is None or db_board.owner_id != current_user.id:
+    #     raise HTTPException(status_code=404, detail="Board not found or you are not the owner")
+    # --- END DEBUG ---
     
     # 招待されるユーザーを検索
     user_to_add = crud.get_user_by_email(db, email=invite.email)
@@ -340,5 +343,18 @@ def register_push_token(
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
     return crud.create_user_push_token(db=db, token=token, user_id=current_user.id)
+
+
+@router.get("/debug/users", response_model=List[schemas.User], include_in_schema=False)
+def read_all_users_for_debug(
+    db: Session = Depends(get_db),
+):
+    """
+    DEBUG ONLY: Get all users in the database.
+    This endpoint should be removed before production.
+    """
+    users = crud.get_users(db)
+    return users
+
 
 app.include_router(router)

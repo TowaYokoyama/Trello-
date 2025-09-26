@@ -240,18 +240,80 @@ export default function BoardDetailScreen() {
   };
 
   const handleInviteMember = async () => {
-    if (!inviteEmail.trim() || !boardId) return;
-    try {
-      const response = await apiClient.post(`/api/boards/${boardId}/members`, { email: inviteEmail });
-      setBoard(response.data);
-      setInviteModalVisible(false);
-      setInviteEmail('');
-    } catch (error) {
-      console.error('Failed to invite member', error);
-      if (Platform.OS === 'web') {
-        alert('招待エラー: メンバーの招待に失敗しました。メールアドレスを確認してください。');
+    console.log("Invite button clicked. handleInviteMember function started.");
+    const trimmedEmail = inviteEmail.trim();
+    console.log(`Email entered: '${inviteEmail}', Trimmed: '${trimmedEmail}', Board ID: ${boardId}`);
+    if (!trimmedEmail || !boardId) {
+      console.log("Exiting handleInviteMember: Email or Board ID is missing.");
+      return;
+    }
+
+    const performInvite = async () => {
+      console.log(`Attempting to invite member with email: ${trimmedEmail} to board ${boardId}`);
+      try {
+        const response = await apiClient.post(`/api/boards/${boardId}/members`, { email: trimmedEmail });
+        console.log('Invite member API response:', response.data);
+        setBoard(response.data);
+        setInviteModalVisible(false);
+        setInviteEmail('');
+        // 成功したことをユーザーに通知
+        if (Platform.OS === 'web') {
+          alert(`${trimmedEmail} を招待しました。`);
+        } else {
+          Alert.alert('招待成功', `${trimmedEmail} を招待しました。`);
+        }
+      } catch (error) {
+        console.error('Failed to invite member', error);
+        const errorMessage = 'メンバーの招待に失敗しました。メールアドレスを確認するか、既に参加済みでないか確認してください。';
+        if (Platform.OS === 'web') {
+          alert(`招待エラー: ${errorMessage}`);
+        } else {
+          Alert.alert('招待エラー', errorMessage);
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`次のメールアドレスを招待しますか？\n\n${trimmedEmail}`)) {
+        await performInvite();
       } else {
-        Alert.alert('招待エラー', 'メンバーの招待に失敗しました。メールアドレスを確認してください。');
+        console.log("Invite cancelled by user.");
+      }
+    } else {
+      Alert.alert(
+        "招待の確認",
+        `次のメールアドレスを招待しますか？\n\n${trimmedEmail}`,
+        [
+          { text: "キャンセル", style: "cancel", onPress: () => console.log("Invite cancelled by user.") },
+          { text: "実行", onPress: performInvite },
+        ]
+      );
+    }
+  };
+
+  const showAllUsers = async () => {
+    console.log("Debug button pressed. Calling showAllUsers...");
+    try {
+      const response = await apiClient.get('/api/debug/users');
+      console.log("API response:", response);
+      const users = response.data;
+      const userEmails = users.map((user: { email: string }) => user.email).join('\n');
+      console.log("User emails:", userEmails);
+
+      const message = userEmails || "登録されているユーザーはいません。";
+      const title = "登録済みユーザー一覧";
+
+      if (Platform.OS === 'web') {
+        window.alert(`${title}\n\n${message}`);
+      } else {
+        Alert.alert(title, message);
+      }
+    } catch (error) {
+      console.error("Failed to fetch users for debug", error);
+      if (Platform.OS === 'web') {
+        window.alert("エラー: ユーザー一覧の取得に失敗しました。");
+      } else {
+        Alert.alert("エラー", "ユーザー一覧の取得に失敗しました。");
       }
     }
   };
@@ -452,6 +514,11 @@ export default function BoardDetailScreen() {
             <TouchableOpacity onPress={() => router.push('/(app)')} style={styles.backButton}>
               <Text style={styles.backButtonText}>🔙 </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity onPress={showAllUsers} style={styles.debugButton}>
+              <Text style={styles.debugButtonText}>[D]</Text>
+            </TouchableOpacity>
+
             <Text style={styles.boardTitle}>{board?.title}</Text>
 
             {/* Members display */}
@@ -518,6 +585,20 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: '#64ffda',
     fontSize: 16,
+  },
+  debugButton: {
+    position: 'absolute',
+    bottom: -20,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+    zIndex: 1,
+  },
+  debugButtonText: {
+    color: '#fff',
+    fontSize: 10,
   },
   calendarButton: {
     backgroundColor: 'rgba(100, 255, 218, 0.15)',
