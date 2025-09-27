@@ -1,4 +1,85 @@
-from typing import List
+import asyncio
+from typing import List, Dict
+
+from fastapi import Depends, FastAPI, HTTPException, status, APIRouter, WebSocket, WebSocketDisconnect
+
+# --- ここからWebSocket関連の実装 --- 
+
+class ConnectionManager:
+    """
+    WebSocket接続を管理するクラス。 誰が今オンライン化を覚えて、メッセージを配信する役割
+    """
+    def __init__(self):
+        # ボードIDをキーとし、そのボードに接続しているWebSocketのリストを値とする辞書
+        self.active_connections: Dict[int, List[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, board_id: int):
+        """
+        新しいWebSocket接続を受け入れ、管理下に追加します。
+        """
+        await websocket.accept()
+        
+        if board_id not in self.active_connections:
+            self.active_connections[board_id] = []
+            
+        self.active_connections[board_id].append(websocket)
+        
+
+    def disconnect(self, websocket: WebSocket, board_id: int):
+        """
+        切断されたWebSocket接続を管理下から削除します。
+        """
+        if board_id in self.active_connections:
+            self.active_connections[board_id].remove(websocket)
+            
+            #リストが空になったら、辞書のエントリも削除してメモリ解放
+            if not self.active_connections[board_id]:
+                del self.active_connections[board_id]
+
+    async def broadcast(self, message: dict, board_id: int):
+        """
+        指定されたボードIDに接続しているすべてのクライアントにJSONメッセージを送信（ブロードキャスト）します。
+        """
+       
+        if board_id in self.active_connections:
+            #ブロードキャストは非同期処理で、同時に多数のユーザーに送ります
+            #送信中のエラーをハンドリングし、接続が切れている場合はリストから削除すべきです
+            
+            #接続が有効なwebsocketのみのリスト
+            valid_connections = []
+            
+            #すべての送信処理を並行して実行するためのタスクリスト
+            send_tasks = []
+            
+            for connection in self.active_connections[board_id]:
+                #接続の有効性を確認し、タスクに追加
+                send_tasks.append(connection.send_json(message))
+                valid_connections.append(connection) #いったんすべて有効としてリストに追加
+                
+            #すべての送信タスクを並行して実行
+            # asyncio.gatherを使うと、どれか一つ失敗しても、他は実行され続けます
+            results = await asyncio.gather(*send_tasks, return_exceptions=True)
+            
+            #エラー処理（接断されている接続をリストから削除する）
+            connections_to_remove = []
+            for i, result in enumerate(results):
+                if isinstance(result,Exception):
+                    #送信に失敗した接続を削除リストに追加
+                    connections_to_remove.append(valid_connections[i])
+                    
+            for connection in connections_to_remove:
+                #辞書から切断された接続を削除
+                if board_id in self.acrtive_connections and connection in self.active_connections[board_id]:
+                    self.active_connections[board_id].remove(connection)
+                    
+            if board_id in self.active_connections and not self.active_conenections[board_id]:
+                del self.active_connections[board_id]
+
+# ConnectionManagerのインスタンスを作成
+manager = ConnectionManager()
+
+# --- WebSocket関連の実装ここまで ---
+
 
 from fastapi import Depends, FastAPI, HTTPException, status, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
@@ -498,4 +579,83 @@ def debug_get_user_boards(user_id: int, db: Session = Depends(get_db)):
     return boards
 
 
+@router.websocket("/ws/boards/{board_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    board_id: int, 
+    #クエリパラメーターから認証トークンを受け取る
+    token: str = Query(..., description="jwt Bearer token for authentication")
+):
+    await websocket.accept()
+    
+    db: Session = None 
+    current_user = None 
+    
+    try: 
+        #1 ユーザー認証と許可
+        #dbセッションを手動で取得
+        db = next(get_db())
+        
+        #トークンによるユーザー認証
+        current_user = auth.get_current_user_from_token(token, db)
+        #ボードへのアクセス権限を✔する
+        db_board = crud.get_board(db, board_id=board_id)
+        if db_board is None :
+            raise HTTPException(status_code=404, detail="Board not found")
+        is_owner = db_board.owner_id == current_user.id 
+        is_member = current_user.id in [member.id for member in db_board.members]
+        
+        if not(is_owner or is_member):
+            #アクセス権がない
+            raise HTTPException(status_code=403, detail="Not authorized to access this board")
+        
+        #2接続の登録と維持
+        await manager.connect(websocket, board_id)
+        
+        #接続開始をほかのユーザーに通知
+        join_message = {
+            "type": "USER_JOINED",
+            "data": {
+                "user_id": current_user.id,
+                "email": current_user.email, #"ユーザー識別のために送る"
+                "board_id": board_id
+            }
+        }
+        await manager.broadcast(join_message, board_id)
+        
+        print(f"User {current_user.id} connected to board {board_id}") #ログ出力
+        
+        while True:
+            #クライアントからのメッセージ(ping/pong,かーそる移動,チャット)を待機
+            #この行がブロックされることで、接続が維持され、切断時に例外が発生する
+            data = await websocket.receive_text()
+            
+            #Todo:クライアントからのメッセージ処理をここに追加（例: カーソル位置のブロードキャスト）
+            #await:manager.broadcast({"type": "CURSOR_UPDATE","data": json.loads(data)}, board_id)
+    except WebSocketDisconnect:
+        pass 
+    except HTTPException as e: 
+        #認証または許可のエラー(401,403,404)
+        #接続を閉じて、理由をクライアントに伝えます
+        close_code = status.WS_1008_POLICY_VIOLATION
+        await websocket.close(code=close_code)
+        
+    finally: 
+        #3接続の処理と退出許可
+        if current_user:#認証が完了、ユーザーidが確定してる場合のみ
+            manager.disconnect(websocket, board_id)
+            
+            #他の接続ユーザーに退出を通知
+             
+            leave_message = {
+                
+            "type": "USER_LEFT",
+            "data": {
+                "user_id":current_user.id,
+                "board_id":board_id
+            }}
+            await manager.broadcast(leave_message, board_id)
+            print(f"User {current_user.id} disconnected from board {board_id}") #ログ出力
+            if db:
+                db.close()
 app.include_router(router)

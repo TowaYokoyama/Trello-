@@ -15,9 +15,9 @@ from . import crud, models, schemas
 from .database import SessionLocal
 
 # --- JWT Settings ---
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-for-jwt")
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-for-jwt") #Todo: 環境変数から取得するようにする！
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 30 #Todo; リフレッシュ機能、もっと長くなる等に調整
 
 # --- Password Hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -110,3 +110,29 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     
     # ユーザーオブジェクトを返します。
     return user
+
+def get_current_user_from_token(token: str, db: Session) -> models.User:
+    """
+    WebSocket接続や非同期処理など、FastApiのdependsを使えない場所で
+    JWTトークンを検証し、現在のログインユーザーを返す関数
+    """
+    #　認証情報が不正な場合に投げる関数
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    #ユーザー情報を取得
+    user = crud.get_user_by_email(db, email=email)
+    if user is None:
+        raise credentials_exception 
+    
+    return user 
