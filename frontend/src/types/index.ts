@@ -19,5 +19,5 @@ export interface Board {
 export interface User {
   id: number;
   email: string;
-  name: string;
+  name?: string; // nameをオプショナルに変更
 }

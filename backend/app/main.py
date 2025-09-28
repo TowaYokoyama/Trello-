@@ -1,78 +1,64 @@
 import asyncio
-from typing import List, Dict
+from typing import List, Dict, Any, Union
 
-from fastapi import Depends, FastAPI, HTTPException, status, APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, status, APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from pydantic import BaseModel 
+import requests 
 
-# --- ここからWebSocket関連の実装 --- 
+# モジュールインポート (環境に合わせて調整)
+from . import crud, models, schemas, auth
+from .database import SessionLocal, engine 
+
+# データベースのテーブルを作成します。
+# models.Base.metadata.create_all(bind=engine) # Docker環境で既に実行されているはず
+
+# --- WebSocket関連の実装 --- 
 
 class ConnectionManager:
     """
     WebSocket接続を管理するクラス。 誰が今オンライン化を覚えて、メッセージを配信する役割
     """
     def __init__(self):
-        # ボードIDをキーとし、そのボードに接続しているWebSocketのリストを値とする辞書
         self.active_connections: Dict[int, List[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, board_id: int):
-        """
-        新しいWebSocket接続を受け入れ、管理下に追加します。
-        """
-        await websocket.accept()
-        
+        """ 新しいWebSocket接続を受け入れ、管理下に追加します。 """
         if board_id not in self.active_connections:
             self.active_connections[board_id] = []
-            
         self.active_connections[board_id].append(websocket)
-        
 
     def disconnect(self, websocket: WebSocket, board_id: int):
-        """
-        切断されたWebSocket接続を管理下から削除します。
-        """
+        """ 切断されたWebSocket接続を管理下から削除します。 """
         if board_id in self.active_connections:
             self.active_connections[board_id].remove(websocket)
-            
-            #リストが空になったら、辞書のエントリも削除してメモリ解放
             if not self.active_connections[board_id]:
                 del self.active_connections[board_id]
 
     async def broadcast(self, message: dict, board_id: int):
-        """
-        指定されたボードIDに接続しているすべてのクライアントにJSONメッセージを送信（ブロードキャスト）します。
-        """
-       
+        """ 指定されたボードIDに接続しているすべてのクライアントにJSONメッセージを送信（ブロードキャスト）します。 """
         if board_id in self.active_connections:
-            #ブロードキャストは非同期処理で、同時に多数のユーザーに送ります
-            #送信中のエラーをハンドリングし、接続が切れている場合はリストから削除すべきです
-            
-            #接続が有効なwebsocketのみのリスト
-            valid_connections = []
-            
-            #すべての送信処理を並行して実行するためのタスクリスト
             send_tasks = []
+            valid_connections = self.active_connections[board_id].copy() # 削除用リストをコピーして参照を保持
             
-            for connection in self.active_connections[board_id]:
-                #接続の有効性を確認し、タスクに追加
+            for connection in valid_connections:
                 send_tasks.append(connection.send_json(message))
-                valid_connections.append(connection) #いったんすべて有効としてリストに追加
                 
-            #すべての送信タスクを並行して実行
-            # asyncio.gatherを使うと、どれか一つ失敗しても、他は実行され続けます
             results = await asyncio.gather(*send_tasks, return_exceptions=True)
             
-            #エラー処理（接断されている接続をリストから削除する）
             connections_to_remove = []
             for i, result in enumerate(results):
-                if isinstance(result,Exception):
-                    #送信に失敗した接続を削除リストに追加
+                if isinstance(result, Exception):
                     connections_to_remove.append(valid_connections[i])
                     
             for connection in connections_to_remove:
-                #辞書から切断された接続を削除
-                if board_id in self.acrtive_connections and connection in self.active_connections[board_id]:
+                # 【修正】タイプミスのない正しい辞書を参照
+                if board_id in self.active_connections and connection in self.active_connections[board_id]:
                     self.active_connections[board_id].remove(connection)
                     
-            if board_id in self.active_connections and not self.active_conenections[board_id]:
+            if board_id in self.active_connections and not self.active_connections[board_id]:
                 del self.active_connections[board_id]
 
 # ConnectionManagerのインスタンスを作成
@@ -80,25 +66,12 @@ manager = ConnectionManager()
 
 # --- WebSocket関連の実装ここまで ---
 
-
-from fastapi import Depends, FastAPI, HTTPException, status, APIRouter
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from pydantic import BaseModel # Import BaseModel
-import requests # Add this
-
-from . import crud, models, schemas, auth
-from .database import SessionLocal, engine
-
-# データベースのテーブルを作成します。
-models.Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 router = APIRouter(prefix="/api")
 
 # CORSミドルウェアを有効にする
-origins = ["*"]
+# 【修正】フロントエンドのオリジンを追加
+origins = ["*", "http://localhost:8081", ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -124,7 +97,7 @@ class TestNotificationRequest(BaseModel):
     body: str
 
 
-# --- 認証関連のエンドポイント ---
+# --- 認証関連のエンドポイント (変更なし) ---
 
 @router.post("/auth/login", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -152,7 +125,7 @@ def read_users_me(current_user: schemas.User = Depends(auth.get_current_user)):
     return current_user
 
 
-# New endpoint for sending test notifications
+# New endpoint for sending test notifications (変更なし)
 @router.post("/send-test-notification")
 async def send_test_notification(request: TestNotificationRequest):
     try:
@@ -169,7 +142,7 @@ async def send_test_notification(request: TestNotificationRequest):
                 "body": request.body,
             },
         )
-        response.raise_for_status() # Raise an exception for HTTP errors
+        response.raise_for_status() 
         return {"message": "Notification sent successfully!", "details": response.json()}
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Failed to send notification: {e}")
@@ -185,17 +158,7 @@ def create_board_for_current_user(
 ):
     return crud.create_user_board(db=db, board=board, user_id=current_user.id)
 
-
-# --- Board エンドポイント ---
-
-@router.post("/boards/", response_model=schemas.Board)
-def create_board_for_current_user(
-    board: schemas.BoardCreate,
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(auth.get_current_user),
-):
-    return crud.create_user_board(db=db, board=board, user_id=current_user.id)
-
+# 【重複エンドポイントを削除】
 
 @router.get("/boards/", response_model=List[schemas.Board])
 def read_boards_for_current_user(
@@ -204,9 +167,7 @@ def read_boards_for_current_user(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    現在ログインしているユーザーがアクセス可能なボード（所有またはメンバー）の一覧を取得します。
-    """
+    """ 現在ログインしているユーザーがアクセス可能なボード（所有またはメンバー）の一覧を取得します。 """
     return crud.get_boards_for_user(db, user_id=current_user.id, skip=skip, limit=limit)
 
 
@@ -216,22 +177,18 @@ def read_board(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたIDのボード情報を取得します。
-    ユーザーがそのボードの所有者またはメンバーでない場合は、アクセスを拒否します。
-    """
+    """ 指定されたIDのボード情報を取得します。 """
     db_board = crud.get_board(db, board_id=board_id)
     
-    # ボードが存在しない場合のチェック
     if db_board is None:
         raise HTTPException(status_code=404, detail="Board not found")
 
-    # ユーザーが所有者でもなく、メンバーでもない場合のアクセス拒否チェック
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
+    # 【修正】認可チェックを crud.py のロジックに合わせる
+    is_allowed = crud.is_user_allowed_access(db, board_id=board_id, user_id=current_user.id)
     
-    if not (is_owner or is_member):
-        raise HTTPException(status_code=403, detail="Not authorized to access this board")
+    if not is_allowed:
+        # REST API なので HTTPException を投げる
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this board")
         
     return db_board
 
@@ -243,9 +200,17 @@ def update_board(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
+    # 【認可チェック修正】
+    is_allowed = crud.is_user_allowed_access(db, board_id=board_id, user_id=current_user.id)
     db_board = crud.get_board(db, board_id=board_id)
-    if db_board is None or db_board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+    
+    if db_board is None or not is_allowed:
+        raise HTTPException(status_code=404, detail="Board not found or not authorized")
+        
+    # オーナーのみがボード設定を更新できる場合、ここでさらにチェックが必要
+    if db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can modify board settings.")
+        
     return crud.update_board(db=db, db_board=db_board, board_in=board)
 
 
@@ -256,8 +221,10 @@ def delete_board(
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
     db_board = crud.get_board(db, board_id=board_id)
+    
     if db_board is None or db_board.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Board not found or not owned by user")
+        
     return crud.delete_board(db=db, db_board=db_board)
 
 
@@ -273,29 +240,14 @@ def add_board_member(
 ):
     db_board = crud.get_board(db, board_id=board_id)
 
-    # --- DEBUG LOGGING START ---
-    print(f"DEBUG: Received email to invite: '{invite.email}'")
-    if db_board:
-        print(f"DEBUG: Attempting to add member to board {board_id}")
-        print(f"DEBUG: Board Owner ID: {db_board.owner_id}, Current User ID: {current_user.id}")
-    else:
-        print(f"DEBUG: Board with ID {board_id} not found.")
-    # --- DEBUG LOGGING END ---
-
-    # --- DEBUG: Temporarily disable owner check ---
-    # オーナーチェック
-    # if db_board is None or db_board.owner_id != current_user.id:
-    #     raise HTTPException(status_code=404, detail="Board not found or you are not the owner")
-    # --- END DEBUG ---
-    
-    # 招待されるユーザーを検索
+    if db_board is None or db_board.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Board not found or you are not the owner")
+        
     user_to_add = crud.get_user_by_email(db, email=invite.email)
     if user_to_add is None:
         raise HTTPException(status_code=404, detail="User to invite not found")
 
-    # crud を呼び出し
-    updated_board = crud.add_member_to_board(db=db, board=db_board, user=user_to_add)
-    return updated_board
+    return crud.add_member_to_board(db=db, board=db_board, user=user_to_add)
 
 
 # --- List エンドポイント ---
@@ -307,20 +259,14 @@ def create_list_for_board(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたボードに新しいリストを作成します。
-    ユーザーがそのボードの所有者またはメンバーでない場合は、操作を拒否します。
-    """
     db_board = crud.get_board(db, board_id=board_id)
 
-    # ボードの存在とアクセス権限をチェック
     if db_board is None:
         raise HTTPException(status_code=404, detail="Board not found")
     
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
+    is_allowed = crud.is_user_allowed_access(db, board_id=board_id, user_id=current_user.id)
     
-    if not (is_owner or is_member):
+    if not is_allowed:
         raise HTTPException(status_code=403, detail="Not authorized to create a list on this board")
 
     return crud.create_board_list(db=db, list_item=list_item, board_id=board_id)
@@ -334,36 +280,19 @@ def read_lists_for_board(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたボードに属するリストの一覧を取得します。
-    ユーザーがそのボードの所有者またはメンバーでない場合は、アクセスを拒否します。
-    """
     db_board = crud.get_board(db, board_id=board_id)
 
-    # ボードの存在とアクセス権限をチェック
     if db_board is None:
         raise HTTPException(status_code=404, detail="Board not found")
     
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
+    # 【修正】is_user_member_of_board を統合関数に置き換え
+    is_allowed = crud.is_user_allowed_access(db, board_id=board_id, user_id=current_user.id)
     
-    if not (is_owner or is_member):
-        raise HTTPException(status_code=403, detail="Not authorized to access this board")
+    if not is_allowed:
+        # ★ REST API なので HTTPException を投げる
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this board")
 
-    lists = crud.get_lists_by_board(db, board_id=board_id, skip=skip, limit=limit)
-    return lists
-
-
-@router.get("/lists/{list_id}", response_model=schemas.ListSchema)
-def read_list(
-    list_id: int,
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(auth.get_current_user),
-):
-    db_list = crud.get_list(db, list_id=list_id)
-    if db_list is None or db_list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="List not found or not owned by user")
-    return db_list
+    return crud.get_lists_by_board(db, board_id=board_id, skip=skip, limit=limit)
 
 
 @router.put("/lists/{list_id}", response_model=schemas.ListSchema)
@@ -373,19 +302,14 @@ def update_list(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたリストの情報を更新します。
-    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
-    """
     db_list = crud.get_list(db, list_id=list_id)
     if db_list is None:
         raise HTTPException(status_code=404, detail="List not found")
 
     db_board = db_list.board
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
+    is_allowed = crud.is_user_allowed_access(db, board_id=db_board.id, user_id=current_user.id)
 
-    if not (is_owner or is_member):
+    if not is_allowed:
         raise HTTPException(status_code=403, detail="Not authorized to update a list on this board")
 
     return crud.update_list(db=db, db_list=db_list, list_in=list_item)
@@ -397,19 +321,14 @@ def delete_list(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたリストを削除します。
-    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
-    """
     db_list = crud.get_list(db, list_id=list_id)
     if db_list is None:
         raise HTTPException(status_code=404, detail="List not found")
-
+        
     db_board = db_list.board
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
-
-    if not (is_owner or is_member):
+    is_allowed = crud.is_user_allowed_access(db, board_id=db_board.id, user_id=current_user.id)
+    
+    if not is_allowed:
         raise HTTPException(status_code=403, detail="Not authorized to delete a list on this board")
 
     return crud.delete_list(db=db, db_list=db_list)
@@ -424,67 +343,40 @@ def create_card_for_list(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたリストに新しいカードを作成します。
-    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
-    """
     db_list = crud.get_list(db, list_id=list_id)
 
-    # リストの存在をチェック
     if db_list is None:
         raise HTTPException(status_code=404, detail="List not found")
 
-    # ボードへのアクセス権限をチェック
     db_board = db_list.board
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
+    is_allowed = crud.is_user_allowed_access(db, board_id=db_board.id, user_id=current_user.id)
 
-    if not (is_owner or is_member):
+    if not is_allowed:
         raise HTTPException(status_code=403, detail="Not authorized to create a card on this board")
 
     return crud.create_list_card(db=db, card=card, list_id=list_id)
 
 
 @router.get("/lists/{list_id}/cards/", response_model=List[schemas.Card])
-def read_cards_for_list(
+async def read_cards_for_list(
     list_id: int,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたリストに属するカードの一覧を取得します。
-    ユーザーがそのリストが属するボードの所有者またはメンバーでない場合は、アクセスを拒否します。
-    """
     db_list = crud.get_list(db, list_id=list_id)
 
-    # リストの存在をチェック
     if db_list is None:
         raise HTTPException(status_code=404, detail="List not found")
 
-    # ボードへのアクセス権限をチェック
     db_board = db_list.board
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user in db_board.members
+    is_allowed = crud.is_user_allowed_access(db, board_id=db_board.id, user_id=current_user.id)
 
-    if not (is_owner or is_member):
+    if not is_allowed:
         raise HTTPException(status_code=403, detail="Not authorized to access this board")
 
-    cards = crud.get_cards_by_list(db, list_id=list_id, skip=skip, limit=limit)
-    return cards
-
-
-@router.get("/cards/{card_id}", response_model=schemas.Card)
-def read_card(
-    card_id: int,
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(auth.get_current_user),
-):
-    db_card = crud.get_card(db, card_id=card_id)
-    if db_card is None or db_card.list.board.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Card not found or not owned by user")
-    return crud.get_card(db, card_id=card_id)
+    return crud.get_cards_by_list(db, list_id=list_id, skip=skip, limit=limit)
 
 
 @router.put("/cards/{card_id}", response_model=schemas.Card)
@@ -494,22 +386,15 @@ def update_card(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたカードの情報を更新します。
-    ユーザーがそのカードが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
-    """
     db_card = crud.get_card(db, card_id=card_id)
 
-    # カードの存在をチェック
     if db_card is None:
         raise HTTPException(status_code=404, detail="Card not found")
 
-    # ボードへのアクセス権限をチェック
     db_board = db_card.list.board
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
+    is_allowed = crud.is_user_allowed_access(db, board_id=db_board.id, user_id=current_user.id)
 
-    if not (is_owner or is_member):
+    if not is_allowed:
         raise HTTPException(status_code=403, detail="Not authorized to update a card on this board")
 
     return crud.update_card(db=db, db_card=db_card, card_in=card)
@@ -521,25 +406,20 @@ def delete_card(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user),
 ):
-    """
-    指定されたカードを削除します。
-    ユーザーがそのカードが属するボードの所有者またはメンバーでない場合は、操作を拒否します。
-    """
     db_card = crud.get_card(db, card_id=card_id)
     if db_card is None:
         raise HTTPException(status_code=404, detail="Card not found")
 
     db_board = db_card.list.board
-    is_owner = db_board.owner_id == current_user.id
-    is_member = current_user.id in [member.id for member in db_board.members]
+    is_allowed = crud.is_user_allowed_access(db, board_id=db_board.id, user_id=current_user.id)
 
-    if not (is_owner or is_member):
+    if not is_allowed:
         raise HTTPException(status_code=403, detail="Not authorized to delete a card on this board")
 
     return crud.delete_card(db=db, db_card=db_card)
 
 
-# --- PushToken エンドポイント ---
+# --- PushToken エンドポイント (変更なし) ---
 
 @router.post("/users/me/push-tokens", response_model=schemas.PushToken)
 def register_push_token(
@@ -550,32 +430,25 @@ def register_push_token(
     return crud.create_user_push_token(db=db, token=token, user_id=current_user.id)
 
 
+# --- Debug エンドポイント (変更なし) ---
+
 @router.get("/debug/users", response_model=List[schemas.User], include_in_schema=False)
 def read_all_users_for_debug(
     db: Session = Depends(get_db),
 ):
-    """
-    DEBUG ONLY: Get all users in the database.
-    This endpoint should be removed before production.
-    """
     users = crud.get_users(db)
     return users
 
 
-
 @router.get("/debug/users/{user_id}/boards", response_model=List[schemas.Board], include_in_schema=False)
 def debug_get_user_boards(user_id: int, db: Session = Depends(get_db)):
-    """
-    デバッグ用：指定されたユーザーIDがアクセス可能なボード一覧を返します。
-    （get_boards_for_userの動作確認用）
-    """
     print(f"--- DEBUG: Fetching boards for user_id: {user_id} ---")
     boards = crud.get_boards_for_user(db, user_id=user_id)
     print(f"--- DEBUG: Found {len(boards)} boards for user_id: {user_id} ---")
     for board in boards:
-        print(f"  - Board ID: {board.id}, Title: {board.title}, Owner ID: {board.owner_id}")
+        print(f"  - Board ID: {board.id}, Title: {board.title}, Owner ID: {board.owner_id}")
         member_ids = [member.id for member in board.members]
-        print(f"    Members: {member_ids}")
+        print(f"    Members: {member_ids}")
     return boards
 
 
@@ -583,79 +456,72 @@ def debug_get_user_boards(user_id: int, db: Session = Depends(get_db)):
 async def websocket_endpoint(
     websocket: WebSocket,
     board_id: int, 
-    #クエリパラメーターから認証トークンを受け取る
     token: str = Query(..., description="jwt Bearer token for authentication")
 ):
-    await websocket.accept()
-    
-    db: Session = None 
-    current_user = None 
-    
-    try: 
-        #1 ユーザー認証と許可
-        #dbセッションを手動で取得
+    db: Session = None
+    current_user: models.User = None
+    try:
+        # 1. ユーザー認証と許可
         db = next(get_db())
-        
-        #トークンによるユーザー認証
-        current_user = auth.get_current_user_from_token(token, db)
-        #ボードへのアクセス権限を✔する
+        try:
+            current_user = auth.get_current_user_from_token(token, db)
+        except HTTPException as e:
+            # 認証失敗: WebSocketエラーコードで切断
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=e.detail)
+            return
+
+        # ボードへのアクセス権限を✔する (is_user_member_of_board を is_user_allowed_access に置き換える前提)
         db_board = crud.get_board(db, board_id=board_id)
         if db_board is None :
-            raise HTTPException(status_code=404, detail="Board not found")
-        is_owner = db_board.owner_id == current_user.id 
-        is_member = current_user.id in [member.id for member in db_board.members]
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Board not found")
+            return
+
+        # 【修正】統合された認可チェックを使用
+        is_allowed = crud.is_user_allowed_access(db, board_id=board_id, user_id=current_user.id)
         
-        if not(is_owner or is_member):
-            #アクセス権がない
-            raise HTTPException(status_code=403, detail="Not authorized to access this board")
+        if not is_allowed:
+            # アクセス権がない
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authorized")
+            return
         
-        #2接続の登録と維持
+        # 2. 接続の登録と維持
+        await websocket.accept() # 接続承認を認証・認可が成功した直後に行う
         await manager.connect(websocket, board_id)
         
-        #接続開始をほかのユーザーに通知
+        # 接続開始をほかのユーザーに通知 (オプション)
         join_message = {
             "type": "USER_JOINED",
             "data": {
                 "user_id": current_user.id,
-                "email": current_user.email, #"ユーザー識別のために送る"
+                "email": current_user.email,
                 "board_id": board_id
             }
         }
         await manager.broadcast(join_message, board_id)
         
-        print(f"User {current_user.id} connected to board {board_id}") #ログ出力
-        
+        print(f"User {current_user.email} connected to board {board_id}")
+
         while True:
-            #クライアントからのメッセージ(ping/pong,かーそる移動,チャット)を待機
-            #この行がブロックされることで、接続が維持され、切断時に例外が発生する
             data = await websocket.receive_text()
+            # TODO: クライアントからのメッセージ処理
             
-            #Todo:クライアントからのメッセージ処理をここに追加（例: カーソル位置のブロードキャスト）
-            #await:manager.broadcast({"type": "CURSOR_UPDATE","data": json.loads(data)}, board_id)
     except WebSocketDisconnect:
+        # 正常な切断
         pass 
-    except HTTPException as e: 
-        #認証または許可のエラー(401,403,404)
-        #接続を閉じて、理由をクライアントに伝えます
-        close_code = status.WS_1008_POLICY_VIOLATION
-        await websocket.close(code=close_code)
-        
+    except Exception as e:
+        print(f"An unexpected error occurred in websocket for board {board_id}: {e}")
+
     finally: 
-        #3接続の処理と退出許可
-        if current_user:#認証が完了、ユーザーidが確定してる場合のみ
+        # 3. 接続のクリーンアップと退出通知
+        if current_user:
             manager.disconnect(websocket, board_id)
-            
-            #他の接続ユーザーに退出を通知
-             
             leave_message = {
-                
-            "type": "USER_LEFT",
-            "data": {
-                "user_id":current_user.id,
-                "board_id":board_id
-            }}
+                "type": "USER_LEFT",
+                "data": {"user_id": current_user.id, "board_id": board_id}
+            }
+            # ブロードキャストは認証が成功している場合にのみ試みる
             await manager.broadcast(leave_message, board_id)
-            print(f"User {current_user.id} disconnected from board {board_id}") #ログ出力
-            if db:
-                db.close()
+        if db:
+            db.close()
+
 app.include_router(router)

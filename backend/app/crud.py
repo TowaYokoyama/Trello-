@@ -136,6 +136,20 @@ def remove_member_from_board(db: Session, *, board: models.Board, user: models.U
     return board
 
 
+def is_user_allowed_access(db: Session, *, board_id: int, user_id: int) -> bool:
+    """
+    Check if a user is a member of a specific board.
+    この関数をWebSocket/ReatAPIの認可チェックに使用します
+    """
+    return db.query(models.Board).filter(
+        models.Board.id == board_id,
+        or_(
+            models.Board.owner_id == user_id, #オーナーである
+            models.Board.members.any(models.User.id == user_id) #メンバーである
+        )
+    ).first() is not None
+
+
 # --- List CRUD ---
 
 def get_list(db: Session, list_id: int):

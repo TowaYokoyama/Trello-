@@ -261,7 +261,7 @@ export default function BoardsScreen() {
         ref={flatListRef}
         ListHeaderComponent={renderListHeader}
         data={Array.isArray(boards) ? boards : []}
-        //key={numColumns}
+        key={numColumns}
         numColumns={numColumns}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContentContainer}

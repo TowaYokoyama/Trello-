@@ -17,6 +17,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import apiClient from '../../../src/api/client';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
+import { useAuth } from '../../../src/contexts/AuthContext'; // useAuthをインポート
 import BoardComponent from '../../../src/components/board/Board';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import SimpleWebDatePicker from '@/components/common/SimpleWebDatePicker.web';
@@ -96,6 +97,61 @@ export default function BoardDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
+  const { token } = useAuth(); // useAuthフックからtokenを取得
+
+  // WebSocketの状態を管理
+  const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
+
+
+  useEffect(() => {
+    // WebSocketの接続処理
+    if (!boardId || !token) return;
+
+    // バックエンドのIPアドレスを環境変数などから取得するように変更するのが望ましい
+    const ws = new WebSocket(`ws://192.168.0.11:8088/ws/boards/${boardId}?token=${token}`);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      console.log('WebSocket message received:', message);
+
+      // メッセージのタイプに応じて状態を更新
+      switch (message.type) {
+        case 'USER_JOINED':
+          // ユーザーが参加した場合の処理
+          // 重複しないように追加
+          const newUser: User = { 
+            id: message.data.user_id, 
+            email: message.data.email, 
+            name: message.data.email // Use email as name for now
+          };
+          setOnlineUsers(prev => [...prev.filter(u => u.id !== message.data.user_id), newUser]);
+          break;
+        case 'USER_LEFT':
+          // ユーザーが退出した場合の処理
+          setOnlineUsers(prev => prev.filter(u => u.id !== message.data.user_id));
+          break;
+        // 他のメッセージタイプ（例：CARD_UPDATED）の処理もここに追加
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+
+    // コンポーネントのアンマウント時にWebSocket接続を閉じる
+    return () => {
+      ws.close();
+    };
+  }, [boardId, token]);
+
 
   // Member invite modal state
   const [isInviteModalVisible, setInviteModalVisible] = useState(false);
@@ -530,6 +586,16 @@ export default function BoardDetailScreen() {
               ))}
             </View>
 
+            {/* Online Users Display */}
+            <View style={styles.onlineUsersContainer}>
+              <Text style={styles.onlineUsersTitle}>Online:</Text>
+              {onlineUsers.map(user => (
+                <View key={user.id} style={styles.onlineUserAvatar}>
+                  <Text style={styles.onlineUserAvatarText}>{user.email.charAt(0).toUpperCase()}</Text>
+                </View>
+              ))}
+            </View>
+
             <TouchableOpacity onPress={() => setInviteModalVisible(true)} style={styles.inviteButton}>
               <Text style={styles.inviteButtonText}>+</Text>
             </TouchableOpacity>
@@ -646,6 +712,32 @@ const styles = StyleSheet.create({
   memberAvatarText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  onlineUsersContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  onlineUsersTitle: {
+    color: '#64ffda',
+    fontSize: 14,
+    marginRight: 10,
+  },
+  onlineUserAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(100, 255, 218, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 3,
+  },
+  onlineUserAvatarText: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: 'bold',
   },
   inviteButton: {
